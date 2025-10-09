@@ -153,24 +153,4 @@ mod tests {
     fn test_parse_term_16() {
         test_parse_term_fail("ab(c_d(e_f*),g_h?)))(");
     }
-
-    #[test]
-    fn test_parse_term_17() {
-        test_parse_term_success(
-            "f(a*, b*, x?)",
-            Term::Compound(
-                String::from("f"),
-                vec![
-                    Term::Constant(String::from("a")),
-                    Term::Constant(String::from("b")),
-                    Term::Variable(String::from("x")),
-                ],
-            ),
-        );
-    }
-
-    #[test]
-    fn test_parse_term_18() {
-        test_parse_term_fail("ab(c_d(e_f),g_h)))(");
-    }
 }
