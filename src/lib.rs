@@ -5,49 +5,37 @@ enum Term {
     Compound(String, Vec<Term>),
 }
 
-struct Parser {
-    tokenizer: kohaku::Tokenizer,
+fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+    let term = take_term(iter)?;
+    match iter.next()? {
+        "," => {
+            let mut args = take_term_args(iter)?;
+            args.insert(0, term);
+            Some(args)
+        }
+        ")" => Some(vec![term]),
+        _ => None,
+    }
 }
 
-impl Parser {
-    fn new() -> Self {
-        let tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
-        Parser {
-            tokenizer: tokenizer,
+fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
+    let label = iter.next()?;
+    match iter.next()? {
+        "*" => Some(Term::Constant(String::from(label))),
+        "?" => Some(Term::Variable(String::from(label))),
+        "(" => {
+            let args = take_term_args(iter)?;
+            Some(Term::Compound(String::from(label), args))
         }
+        _ => None,
     }
+}
 
-    fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
-        let term = Self::take_term(iter)?;
-        match iter.next()? {
-            "," => {
-                let mut args = Self::take_term_args(iter)?;
-                args.insert(0, term);
-                Some(args)
-            }
-            ")" => Some(vec![term]),
-            _ => None,
-        }
-    }
-
-    fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
-        let label = iter.next()?;
-        match iter.next()? {
-            "*" => Some(Term::Constant(String::from(label))),
-            "?" => Some(Term::Variable(String::from(label))),
-            "(" => {
-                let args = Self::take_term_args(iter)?;
-                Some(Term::Compound(String::from(label), args))
-            }
-            _ => None,
-        }
-    }
-
-    fn parse_term(&mut self, input: &str) -> Option<Term> {
-        let mut iter = self.tokenizer.tokenize(input).map_while(|x| x.ok());
-        let term = Self::take_term(&mut iter)?;
-        iter.next().is_none().then_some(term)
-    }
+fn parse_term(input: &str) -> Option<Term> {
+    let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
+    let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
+    let term = take_term(&mut iter)?;
+    iter.next().is_none().then_some(term)
 }
 
 #[cfg(test)]
@@ -55,14 +43,12 @@ mod tests {
     use super::*;
 
     fn test_parse_term_success(input: &str, output: Term) {
-        let mut parser = Parser::new();
-        let term = parser.parse_term(input);
+        let term = parse_term(input);
         assert_eq!(term, Some(output));
     }
 
     fn test_parse_term_fail(input: &str) {
-        let mut parser = Parser::new();
-        let term = parser.parse_term(input);
+        let term = parse_term(input);
         assert_eq!(term, None);
     }
 
