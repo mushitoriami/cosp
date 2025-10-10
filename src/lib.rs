@@ -31,11 +31,31 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
     }
 }
 
+fn take_query<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+    let term = take_term(iter)?;
+    match iter.next()? {
+        "," => {
+            let mut args = take_query(iter)?;
+            args.insert(0, term);
+            Some(args)
+        }
+        "." => Some(vec![term]),
+        _ => None,
+    }
+}
+
 fn parse_term(input: &str) -> Option<Term> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let term = take_term(&mut iter)?;
     iter.next().is_none().then_some(term)
+}
+
+fn parse_query(input: &str) -> Option<Vec<Term>> {
+    let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
+    let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
+    let query = take_query(&mut iter)?;
+    iter.next().is_none().then_some(query)
 }
 
 #[cfg(test)]
@@ -152,5 +172,47 @@ mod tests {
     #[test]
     fn test_parse_term_16() {
         test_parse_term_fail("ab(c_d(e_f*),g_h?)))(");
+    }
+
+    #[test]
+    fn test_parse_query_1() {
+        let query = parse_query("f(a*, b*, x?).");
+        assert_eq!(
+            query,
+            Some(vec![Term::Compound(
+                String::from("f"),
+                vec![
+                    Term::Constant(String::from("a")),
+                    Term::Constant(String::from("b")),
+                    Term::Variable(String::from("x")),
+                ]
+            )])
+        );
+    }
+
+    #[test]
+    fn test_parse_query_2() {
+        let query = parse_query("f(a*, b*, x?), g(c*, y?), h(d*).");
+        assert_eq!(
+            query,
+            Some(vec![
+                Term::Compound(
+                    String::from("f"),
+                    vec![
+                        Term::Constant(String::from("a")),
+                        Term::Constant(String::from("b")),
+                        Term::Variable(String::from("x")),
+                    ]
+                ),
+                Term::Compound(
+                    String::from("g"),
+                    vec![
+                        Term::Constant(String::from("c")),
+                        Term::Variable(String::from("y")),
+                    ]
+                ),
+                Term::Compound(String::from("h"), vec![Term::Constant(String::from("d"))])
+            ])
+        );
     }
 }
