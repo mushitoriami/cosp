@@ -109,6 +109,17 @@ fn parse_rules(input: &str) -> Option<Vec<Rule>> {
     iter.next().is_none().then_some(rules)
 }
 
+fn occurs_check(s: &str, t: &Term, r: &HashMap<&str, &Term>) -> bool {
+    match t {
+        Term::Compound(_, args) => args.iter().all(|c| occurs_check(&s, &c, &r)),
+        Term::Variable(s1) if s == s1 => false,
+        Term::Variable(s1) if r.contains_key(s1.as_str()) => {
+            occurs_check(s, r.get(s1.as_str()).unwrap(), r)
+        }
+        _ => true,
+    }
+}
+
 fn unify<'a>(
     t1: &'a Term,
     t2: &'a Term,
@@ -126,7 +137,7 @@ fn unify<'a>(
         (Term::Variable(s), t) | (t, Term::Variable(s)) if r.contains_key(s.as_str()) => {
             unify(r.get(s.as_str()).unwrap(), t, r)
         }
-        (Term::Variable(s), t) | (t, Term::Variable(s)) => {
+        (Term::Variable(s), t) | (t, Term::Variable(s)) if occurs_check(&s, &t, &r) => {
             r.insert(&s, t);
             Some(r)
         }
@@ -383,6 +394,55 @@ mod tests {
                 HashMap::new()
             ),
             None
+        )
+    }
+
+    #[test]
+    fn test_unify_5() {
+        assert_eq!(
+            unify(
+                &parse_term("x?").unwrap(),
+                &parse_term("f(x?)").unwrap(),
+                HashMap::new()
+            ),
+            None
+        )
+    }
+
+    #[test]
+    fn test_unify_6() {
+        assert_eq!(
+            unify(
+                &parse_term("f(f(x?),g(y?))").unwrap(),
+                &parse_term("f(y?,x?)").unwrap(),
+                HashMap::new()
+            ),
+            None
+        )
+    }
+
+    #[test]
+    fn test_unify_7() {
+        assert_eq!(
+            unify(
+                &parse_term("g(x?,y?,x?)").unwrap(),
+                &parse_term("g(f(x?),f(y?),y?)").unwrap(),
+                HashMap::new()
+            ),
+            None
+        )
+    }
+
+    #[test]
+    fn test_unify_8() {
+        assert_eq!(
+            unify(
+                &parse_term("x?").unwrap(),
+                &parse_term("x?").unwrap(),
+                HashMap::new()
+            )
+            .unwrap(),
+            HashMap::new()
         )
     }
 }
