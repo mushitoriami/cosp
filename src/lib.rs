@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, PartialEq)]
 enum Term {
     Constant(String),
@@ -105,6 +107,31 @@ fn parse_rules(input: &str) -> Option<Vec<Rule>> {
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let rules = take_rules(&mut iter)?;
     iter.next().is_none().then_some(rules)
+}
+
+fn unify<'a>(
+    t1: &'a Term,
+    t2: &'a Term,
+    mut r: HashMap<&'a str, &'a Term>,
+) -> Option<HashMap<&'a str, &'a Term>> {
+    match (t1, t2) {
+        (Term::Compound(s1, args1), Term::Compound(s2, args2))
+            if s1 == s2 && args1.len() == args2.len() =>
+        {
+            let mut iter = args1.iter().zip(args2.iter());
+            iter.try_fold(r, |r, (c1, c2)| unify(c1, c2, r))
+        }
+        (Term::Constant(s1), Term::Constant(s2)) if s1 == s2 => Some(r),
+        (Term::Variable(s1), Term::Variable(s2)) if s1 == s2 => Some(r),
+        (Term::Variable(s), t) | (t, Term::Variable(s)) if r.contains_key(s.as_str()) => {
+            unify(r.get(s.as_str()).unwrap(), t, r)
+        }
+        (Term::Variable(s), t) | (t, Term::Variable(s)) => {
+            r.insert(&s, t);
+            Some(r)
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -300,5 +327,62 @@ mod tests {
     fn test_take_rules_4() {
         let rules = parse_rules("[2]*a :- *b, ?c.   \n[4]*d.\n");
         assert_eq!(rules, None);
+    }
+
+    #[test]
+    fn test_unify_1() {
+        assert_eq!(
+            unify(
+                &parse_term("f(a* ,b* ,x? )").unwrap(),
+                &parse_term("f(y? ,b* ,c* )").unwrap(),
+                HashMap::new()
+            )
+            .unwrap(),
+            HashMap::from([
+                ("x", &parse_term("c*").unwrap()),
+                ("y", &parse_term("a*").unwrap())
+            ])
+        )
+    }
+
+    #[test]
+    fn test_unify_2() {
+        assert_eq!(
+            unify(
+                &parse_term("f(x? ,y? )").unwrap(),
+                &parse_term("f(a* ,b* )").unwrap(),
+                HashMap::new()
+            )
+            .unwrap(),
+            HashMap::from([
+                ("x", &parse_term("a*").unwrap()),
+                ("y", &parse_term("b*").unwrap())
+            ])
+        )
+    }
+
+    #[test]
+    fn test_unify_3() {
+        assert_eq!(
+            unify(
+                &parse_term("x?").unwrap(),
+                &parse_term("y?").unwrap(),
+                HashMap::new()
+            )
+            .unwrap(),
+            HashMap::from([("x", &parse_term("y?").unwrap())])
+        )
+    }
+
+    #[test]
+    fn test_unify_4() {
+        assert_eq!(
+            unify(
+                &parse_term("f(a*,b*)").unwrap(),
+                &parse_term("f(x?,x?)").unwrap(),
+                HashMap::new()
+            ),
+            None
+        )
     }
 }
