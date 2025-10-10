@@ -5,6 +5,11 @@ enum Term {
     Compound(String, Vec<Term>),
 }
 
+#[derive(Debug, PartialEq)]
+enum Rule {
+    Rule(u64, Term, Vec<Term>),
+}
+
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
     let term = take_term(iter)?;
     match iter.next()? {
@@ -44,6 +49,43 @@ fn take_query<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>>
     }
 }
 
+fn take_body<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+    let term = take_term(iter)?;
+    match iter.next()? {
+        "," => {
+            let mut args = take_body(iter)?;
+            args.insert(0, term);
+            Some(args)
+        }
+        "." => Some(vec![term]),
+        _ => None,
+    }
+}
+
+fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
+    let cost = iter.next()?.parse().ok()?;
+    let _ = (iter.next()? == "]").then_some(())?;
+    let head = take_term(iter)?;
+    match iter.next()? {
+        ":-" => Some(Rule::Rule(cost, head, take_body(iter)?)),
+        "." => Some(Rule::Rule(cost, head, Vec::new())),
+        _ => None,
+    }
+}
+
+fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Rule>> {
+    match iter.next() {
+        Some("[") => {
+            let rule = take_rule(iter)?;
+            let mut rules = take_rules(iter)?;
+            rules.insert(0, rule);
+            Some(rules)
+        }
+        None => Some(vec![]),
+        _ => None,
+    }
+}
+
 fn parse_term(input: &str) -> Option<Term> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
@@ -56,6 +98,13 @@ fn parse_query(input: &str) -> Option<Vec<Term>> {
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let query = take_query(&mut iter)?;
     iter.next().is_none().then_some(query)
+}
+
+fn parse_rules(input: &str) -> Option<Vec<Rule>> {
+    let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", ".", ":-", "[", "]"]);
+    let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
+    let rules = take_rules(&mut iter)?;
+    iter.next().is_none().then_some(rules)
 }
 
 #[cfg(test)]
@@ -214,5 +263,42 @@ mod tests {
                 Term::Compound(String::from("h"), vec![Term::Constant(String::from("d"))])
             ])
         );
+    }
+
+    #[test]
+    fn test_parse_rules_1() {
+        let rules = parse_rules("[2]a* :- b*, c?.   \n[4]d*.\n");
+        assert_eq!(
+            rules,
+            Some(vec![
+                Rule::Rule(
+                    2,
+                    Term::Constant(String::from("a")),
+                    vec![
+                        Term::Constant(String::from("b")),
+                        Term::Variable(String::from("c"))
+                    ]
+                ),
+                Rule::Rule(4, Term::Constant(String::from("d")), vec![])
+            ])
+        );
+    }
+
+    #[test]
+    fn test_take_rules_2() {
+        let rules = parse_rules("[2]a:-b,C.\n");
+        assert_eq!(rules, None);
+    }
+
+    #[test]
+    fn test_take_rules_3() {
+        let rules = parse_rules("[2]a:-b,C.  \n[4]d.\n");
+        assert_eq!(rules, None);
+    }
+
+    #[test]
+    fn test_take_rules_4() {
+        let rules = parse_rules("[2]*a :- *b, ?c.   \n[4]*d.\n");
+        assert_eq!(rules, None);
     }
 }
