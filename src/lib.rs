@@ -145,6 +145,21 @@ fn unify<'a>(
     }
 }
 
+struct Infer<'a> {
+    todo: &'a str,
+}
+
+impl<'a> Iterator for Infer<'a> {
+    type Item = (u64, HashMap<&'a str, &'a Term>);
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+fn infer<'a>(_query: &'a [Term], _rules: &'a [Rule], _r: HashMap<&'a str, &'a Term>) -> Infer<'a> {
+    Infer { todo: todo!() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,6 +458,466 @@ mod tests {
             )
             .unwrap(),
             HashMap::new()
+        )
+    }
+
+    #[test]
+    fn test_infer_1_1() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(bob*, pat*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::new())]
+        );
+    }
+
+    #[test]
+    fn test_infer_1_2() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(liz*, pat*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            []
+        );
+    }
+
+    #[test]
+    fn test_infer_1_3() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(tom*, ben*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            []
+        );
+    }
+
+    #[test]
+    fn test_infer_1_4() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(x?, liz*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([("x", &parse_term("tom*").unwrap())]))]
+        );
+    }
+
+    #[test]
+    fn test_infer_1_5() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(bob*, y?).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [
+                (0, HashMap::from([("y", &parse_term("ann*").unwrap())])),
+                (0, HashMap::from([("y", &parse_term("pat*").unwrap())]))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_infer_1_6() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(p?, q?).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("pam*").unwrap()),
+                        ("q", &parse_term("bob*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("tom*").unwrap()),
+                        ("q", &parse_term("bob*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("tom*").unwrap()),
+                        ("q", &parse_term("liz*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("bob*").unwrap()),
+                        ("q", &parse_term("ann*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("bob*").unwrap()),
+                        ("q", &parse_term("pat*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("p", &parse_term("pat*").unwrap()),
+                        ("q", &parse_term("jim*").unwrap())
+                    ])
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn test_infer_1_7() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(y?, jim*), parent(x?, y?).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(
+                0,
+                HashMap::from([
+                    ("x", &parse_term("bob*").unwrap()),
+                    ("y", &parse_term("pat*").unwrap())
+                ])
+            )]
+        )
+    }
+
+    #[test]
+    fn test_infer_1_8() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(tom*, x?), parent(x?, y?).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [
+                (
+                    0,
+                    HashMap::from([
+                        ("x", &parse_term("bob*").unwrap()),
+                        ("y", &parse_term("ann*").unwrap())
+                    ])
+                ),
+                (
+                    0,
+                    HashMap::from([
+                        ("x", &parse_term("bob*").unwrap()),
+                        ("y", &parse_term("pat*").unwrap())
+                    ])
+                )
+            ]
+        )
+    }
+
+    #[test]
+    fn test_infer_1_9() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(x?, ann*), parent(x?, pat*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([("x", &parse_term("bob*").unwrap())]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_1_10() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(pam*, x?), parent(x?, y?), parent(y?, jim*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(
+                0,
+                HashMap::from([
+                    ("x", &parse_term("bob*").unwrap()),
+                    ("y", &parse_term("pat*").unwrap())
+                ])
+            )]
+        )
+    }
+
+    #[test]
+    fn test_infer_2() {
+        let rules = &parse_rules(
+            r#"
+                [0] big(bear*).
+                [0] big(elephant*).
+                [0] small(cat*).
+                [0] brown(bear*).
+                [0] black(cat*).
+                [0] gray(elephant*).
+                [0] dark(z?) :- black(z?).
+                [0] dark(z?) :- brown(z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("dark(x?), big(x?).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([("x", &parse_term("bear*").unwrap())]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_3_1() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+                [0] female(pam*).
+                [0] male(tom*).
+                [0] male(bob*).
+                [0] female(liz*).
+                [0] female(ann*).
+                [0] female(pat*).
+                [0] male(jim*).
+                [0] offspring(y?, x?) :- parent(x?, y?).
+                [0] mother(x?, y?) :- parent(x?, y?), female(x?).
+                [0] grandparent(x?, z?) :- parent(x?, y?), parent(y?, z?).
+                [0] sister(x?, y?) :- parent(z?, x?), parent(z?, y?), female(x?), different(x?, y?).
+                [0] predecessor(x?, z?) :- parent(x?, z?).
+                [0] predecessor(x?, z?) :- parent(x?, y?), predecessor(y?, z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("predecessor(tom*, pat*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_3_2() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+                [0] female(pam*).
+                [0] male(tom*).
+                [0] male(bob*).
+                [0] female(liz*).
+                [0] female(ann*).
+                [0] female(pat*).
+                [0] male(jim*).
+                [0] offspring(y?, x?) :- parent(x?, y?).
+                [0] mother(x?, y?) :- parent(x?, y?), female(x?).
+                [0] grandparent(x?, z?) :- parent(x?, y?), parent(y?, z?).
+                [0] sister(x?, y?) :- parent(z?, x?), parent(z?, y?), female(x?), different(x?, y?).
+                [0] predecessor(x?, z?) :- parent(x?, z?).
+                [0] predecessor(x?, z?) :- parent(x?, y?), predecessor(y?, z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("parent(pam*, bob*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_3_3() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+                [0] female(pam*).
+                [0] male(tom*).
+                [0] male(bob*).
+                [0] female(liz*).
+                [0] female(ann*).
+                [0] female(pat*).
+                [0] male(jim*).
+                [0] offspring(y?, x?) :- parent(x?, y?).
+                [0] mother(x?, y?) :- parent(x?, y?), female(x?).
+                [0] grandparent(x?, z?) :- parent(x?, y?), parent(y?, z?).
+                [0] sister(x?, y?) :- parent(z?, x?), parent(z?, y?), female(x?), different(x?, y?).
+                [0] predecessor(x?, z?) :- parent(x?, z?).
+                [0] predecessor(x?, z?) :- parent(x?, y?), predecessor(y?, z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("mother(pam*, bob*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_3_4() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+                [0] female(pam*).
+                [0] male(tom*).
+                [0] male(bob*).
+                [0] female(liz*).
+                [0] female(ann*).
+                [0] female(pat*).
+                [0] male(jim*).
+                [0] offspring(y?, x?) :- parent(x?, y?).
+                [0] mother(x?, y?) :- parent(x?, y?), female(x?).
+                [0] grandparent(x?, z?) :- parent(x?, y?), parent(y?, z?).
+                [0] sister(x?, y?) :- parent(z?, x?), parent(z?, y?), female(x?), different(x?, y?).
+                [0] predecessor(x?, z?) :- parent(x?, z?).
+                [0] predecessor(x?, z?) :- parent(x?, y?), predecessor(y?, z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("grandparent(pam*, ann*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([]))]
+        )
+    }
+
+    #[test]
+    fn test_infer_3_5() {
+        let rules = &parse_rules(
+            r#"
+                [0] parent(pam*, bob*).
+                [0] parent(tom*, bob*).
+                [0] parent(tom*, liz*).
+                [0] parent(bob*, ann*).
+                [0] parent(bob*, pat*).
+                [0] parent(pat*, jim*).
+                [0] female(pam*).
+                [0] male(tom*).
+                [0] male(bob*).
+                [0] female(liz*).
+                [0] female(ann*).
+                [0] female(pat*).
+                [0] male(jim*).
+                [0] offspring(y?, x?) :- parent(x?, y?).
+                [0] mother(x?, y?) :- parent(x?, y?), female(x?).
+                [0] grandparent(x?, z?) :- parent(x?, y?), parent(y?, z?).
+                [0] sister(x?, y?) :- parent(z?, x?), parent(z?, y?), female(x?), different(x?, y?).
+                [0] predecessor(x?, z?) :- parent(x?, z?).
+                [0] predecessor(x?, z?) :- parent(x?, y?), predecessor(y?, z?).
+            "#,
+        )
+        .unwrap();
+        let query = &parse_query("grandparent(bob*, jim*).").unwrap();
+        assert_eq!(
+            infer(query, rules, HashMap::new()).collect::<Vec<(u64, HashMap<&str, &Term>)>>(),
+            [(0, HashMap::from([]))]
         )
     }
 }
