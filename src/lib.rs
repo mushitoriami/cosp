@@ -168,6 +168,7 @@ struct Infer<'a> {
     rules: &'a [Rule],
     stack: Vec<(
         u64,
+        u64,
         HashMap<(u64, &'a str), (u64, &'a Term)>,
         Vec<(u64, &'a Term)>,
         Iter<'a, Rule>,
@@ -178,15 +179,15 @@ impl<'a> Iterator for Infer<'a> {
     type Item = (u64, HashMap<(u64, &'a str), (u64, &'a Term)>);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let (mut namespace, table, mut goals, mut rules_iter) = self.stack.pop()?;
-            if goals.len() == 0 {
-                return Some((0, table));
+            let (mut cost, mut namespace, table, mut goals, mut rules_iter) = self.stack.pop()?;
+            if goals.is_empty() {
+                return Some((cost, table));
             }
-            let Some(Rule::Rule(_, head, body)) = rules_iter.next() else {
+            let Some(Rule::Rule(cost_rule, head, body)) = rules_iter.next() else {
                 continue;
             };
             self.stack
-                .push((namespace, table.clone(), goals.clone(), rules_iter));
+                .push((cost, namespace, table.clone(), goals.clone(), rules_iter));
             namespace += 1;
             let (namespace_goal, goal) = goals.pop().unwrap();
             let Some(table) = unify(namespace, head, namespace_goal, goal, table) else {
@@ -196,7 +197,7 @@ impl<'a> Iterator for Infer<'a> {
                 goals.push((namespace, body_term));
             }
             self.stack
-                .push((namespace, table, goals, self.rules.iter()));
+                .push((cost + cost_rule, namespace, table, goals, self.rules.iter()));
         }
     }
 }
@@ -205,6 +206,7 @@ fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
     Infer {
         rules: rules,
         stack: vec![(
+            0,
             0,
             HashMap::new(),
             goals.into_iter().rev().map(|x| (0, x)).collect(),
