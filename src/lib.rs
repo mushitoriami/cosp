@@ -1163,4 +1163,29 @@ mod tests {
             [(3, HashMap::from([])), (4, HashMap::from([]))]
         )
     }
+
+    const RULES6: &str = r#"
+        [1] f(p*) :- g(q*).
+        [2] g(q*).
+        [4] f(q*).
+    "#;
+
+    #[test]
+    fn test_infer_6_1() {
+        let rules = &parse_rules(RULES6).unwrap();
+        let query = &parse_query("f(x?), g(q*).").unwrap();
+        assert_eq!(
+            infer(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            [
+                (
+                    3,
+                    HashMap::from([((0, "x"), (1, &parse_term("p*").unwrap())),])
+                ),
+                (
+                    6,
+                    HashMap::from([((0, "x"), (1, &parse_term("q*").unwrap())),])
+                )
+            ]
+        )
+    }
 }
