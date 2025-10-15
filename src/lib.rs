@@ -266,21 +266,11 @@ fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
 mod tests {
     use super::*;
 
-    fn test_parse_term_success(input: &str, output: Term) {
-        let term = parse_term(input);
-        assert_eq!(term, Some(output));
-    }
-
-    fn test_parse_term_fail(input: &str) {
-        let term = parse_term(input);
-        assert_eq!(term, None);
-    }
-
     #[test]
     fn test_parse_term_1() {
-        test_parse_term_success(
-            "ab(c_d(e_f*),g_h?)",
-            Term::Compound(
+        assert_eq!(
+            parse_term("ab(c_d(e_f*),g_h?)"),
+            Some(Term::Compound(
                 String::from("ab"),
                 vec![
                     Term::Compound(
@@ -289,93 +279,93 @@ mod tests {
                     ),
                     Term::Variable(String::from("g_h")),
                 ],
-            ),
+            ))
         );
     }
 
     #[test]
     fn test_parse_term_2() {
-        test_parse_term_fail("ab(c_d(*e_f),?g_h)))(");
+        assert_eq!(parse_term("ab(c_d(*e_f),?g_h)))("), None);
     }
 
     #[test]
     fn test_parse_term_3() {
-        test_parse_term_fail("a*(");
+        assert_eq!(parse_term("a*("), None);
     }
 
     #[test]
     fn test_parse_term_4() {
-        test_parse_term_fail("a,a*)");
+        assert_eq!(parse_term("a,a*)"), None);
     }
 
     #[test]
     fn test_parse_term_5() {
-        test_parse_term_fail("a(b*(c*)");
+        assert_eq!(parse_term("a(b*(c*)"), None);
     }
 
     #[test]
     fn test_parse_term_6() {
-        test_parse_term_fail("a)");
+        assert_eq!(parse_term("a)"), None);
     }
 
     #[test]
     fn test_parse_term_7() {
-        test_parse_term_fail("a(b**");
+        assert_eq!(parse_term("a(b**"), None);
     }
 
     #[test]
     fn test_parse_term_8() {
-        test_parse_term_fail("a(*)");
+        assert_eq!(parse_term("a(*)"), None);
     }
 
     #[test]
     fn test_parse_term_9() {
-        test_parse_term_fail("(a*)");
+        assert_eq!(parse_term("(a*)"), None);
     }
 
     #[test]
     fn test_parse_term_10() {
-        test_parse_term_fail("a*a");
+        assert_eq!(parse_term("a*a"), None);
     }
 
     #[test]
     fn test_parse_term_11() {
-        test_parse_term_fail("a(a*a)");
+        assert_eq!(parse_term("a(a*a)"), None);
     }
 
     #[test]
     fn test_parse_term_12() {
-        test_parse_term_success(
-            "f(a*, b*, x?)",
-            Term::Compound(
+        assert_eq!(
+            parse_term("f(a*, b*, x?)"),
+            Some(Term::Compound(
                 String::from("f"),
                 vec![
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
                 ],
-            ),
+            ))
         );
     }
 
     #[test]
     fn test_parse_term_13() {
-        test_parse_term_fail("f(a, b, X)");
+        assert_eq!(parse_term("f(a, b, X)"), None);
     }
 
     #[test]
     fn test_parse_term_14() {
-        test_parse_term_fail("f(*a, *b, ?x)");
+        assert_eq!(parse_term("f(*a, *b, ?x)"), None);
     }
 
     #[test]
     fn test_parse_term_15() {
-        test_parse_term_fail("ab(c_d(e_f),g_h)))(");
+        assert_eq!(parse_term("ab(c_d(e_f),g_h)))("), None);
     }
 
     #[test]
     fn test_parse_term_16() {
-        test_parse_term_fail("ab(c_d(e_f*),g_h?)))(");
+        assert_eq!(parse_term("ab(c_d(e_f*),g_h?)))("), None);
     }
 
     #[test]
