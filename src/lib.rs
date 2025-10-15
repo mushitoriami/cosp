@@ -178,19 +178,19 @@ struct State<'a> {
 
 impl Eq for State<'_> {}
 
-impl<'a> PartialEq for State<'a> {
+impl PartialEq for State<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost
     }
 }
 
-impl<'a> PartialOrd for State<'a> {
+impl PartialOrd for State<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for State<'a> {
+impl Ord for State<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cost.cmp(&other.cost)
     }
