@@ -224,16 +224,16 @@ impl<'a> Iterator for Infer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let mut state = self.pop_state()?;
-            if state.goals.is_empty() {
-                return Some((state.cost, state.table));
-            }
             let Some(Rule::Rule(cost_rule, head, body)) = state.rules_iter.next() else {
                 continue;
             };
-            self.push_state(state.clone());
+            let state_prev = state.clone();
+            let Some((namespace_goal, goal)) = state.goals.pop() else {
+                return Some((state.cost, state.table));
+            };
+            self.push_state(state_prev);
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
-            let (namespace_goal, goal) = state.goals.pop().unwrap();
             let Some(table) = unify(state.namespace, head, namespace_goal, goal, state.table)
             else {
                 continue;
