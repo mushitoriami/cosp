@@ -173,6 +173,7 @@ struct State<'a> {
     namespace: u64,
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
     shared: Vec<(u64, &'a Term)>,
+    shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, Iter<'a, Term>)>,
     rules_iter: Iter<'a, Rule>,
 }
@@ -226,19 +227,26 @@ impl<'a> Infer<'a> {
         goals.push(goals_iter)
     }
 
-    fn pop_goal(
+    fn pop_goal(&mut self, goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>) -> (u64, &'a Term) {
+        let (namespace, _, iter) = goals.last_mut().unwrap();
+        (*namespace, iter.next().unwrap())
+    }
+
+    fn is_empty_goal(&mut self, goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>) -> bool {
+        goals.is_empty()
+    }
+
+    fn update_goals(
         &mut self,
         goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>,
         shared: &mut Vec<(u64, &'a Term)>,
-    ) -> Option<(u64, &'a Term)> {
-        while let Some((namespace, head, goals_iter)) = goals.last_mut() {
-            if let Some(goal) = goals_iter.next() {
-                return Some((*namespace, goal));
-            }
+    ) {
+        while let Some((namespace, head, goals_iter)) = goals.last_mut()
+            && goals_iter.len() == 0
+        {
             shared.push((*namespace, head));
             goals.pop();
         }
-        None
     }
 }
 
@@ -248,15 +256,27 @@ impl<'a> Iterator for Infer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let mut state = self.pop_state()?;
+            if self.is_empty_goal(&mut state.goals) {
+                return Some((state.cost, state.table));
+            }
+            if let Some((namespace, term)) = state.shared_remaining.pop() {
+                self.push_state(state.clone());
+                let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
+                let Some(table) = unify(namespace, term, namespace_goal, goal, state.table) else {
+                    continue;
+                };
+                state.table = table;
+                self.update_goals(&mut state.goals, &mut state.shared);
+                state.rules_iter = self.rules.iter();
+                state.shared_remaining = state.shared.clone();
+                self.push_state(state);
+                continue;
+            }
             let Some(Rule::Rule(cost_rule, head, body)) = state.rules_iter.next() else {
                 continue;
             };
-            let state_prev = state.clone();
-            let Some((namespace_goal, goal)) = self.pop_goal(&mut state.goals, &mut state.shared)
-            else {
-                return Some((state.cost, state.table));
-            };
-            self.push_state(state_prev);
+            self.push_state(state.clone());
+            let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
             let Some(table) = unify(state.namespace, head, namespace_goal, goal, state.table)
@@ -265,7 +285,9 @@ impl<'a> Iterator for Infer<'a> {
             };
             state.table = table;
             self.push_goals(&mut state.goals, (state.namespace, head, body.iter()));
+            self.update_goals(&mut state.goals, &mut state.shared);
             state.rules_iter = self.rules.iter();
+            state.shared_remaining = state.shared.clone();
             self.push_state(state);
         }
     }
@@ -280,6 +302,7 @@ fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
             namespace: 0,
             table: HashMap::new(),
             shared: Vec::new(),
+            shared_remaining: Vec::new(),
             goals: vec![(0, &goals[0], goals.iter())],
             rules_iter: rules.iter(),
         })]),
@@ -1203,6 +1226,10 @@ mod tests {
             [
                 (
                     3,
+                    HashMap::from([((0, "x"), (1, &parse_term("p*").unwrap())),])
+                ),
+                (
+                    5,
                     HashMap::from([((0, "x"), (1, &parse_term("p*").unwrap())),])
                 ),
                 (
