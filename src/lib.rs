@@ -172,7 +172,7 @@ struct State<'a> {
     cost: u64,
     namespace: u64,
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
-    goals: Vec<(u64, &'a Term)>,
+    goals: Vec<(u64, Iter<'a, Term>)>,
     rules_iter: Iter<'a, Rule>,
 }
 
@@ -216,6 +216,24 @@ impl<'a> Infer<'a> {
     fn pop_state(&mut self) -> Option<State<'a>> {
         self.stack.pop().or_else(|| self.pq.pop()).map(|x| x.0)
     }
+
+    fn push_goals(
+        &mut self,
+        goals: &mut Vec<(u64, Iter<'a, Term>)>,
+        goals_iter: (u64, Iter<'a, Term>),
+    ) {
+        goals.push(goals_iter)
+    }
+
+    fn pop_goal(&mut self, goals: &mut Vec<(u64, Iter<'a, Term>)>) -> Option<(u64, &'a Term)> {
+        while let Some((namespace, goals_iter)) = goals.last_mut() {
+            if let Some(goal) = goals_iter.next() {
+                return Some((*namespace, goal));
+            }
+            goals.pop();
+        }
+        None
+    }
 }
 
 impl<'a> Iterator for Infer<'a> {
@@ -228,7 +246,7 @@ impl<'a> Iterator for Infer<'a> {
                 continue;
             };
             let state_prev = state.clone();
-            let Some((namespace_goal, goal)) = state.goals.pop() else {
+            let Some((namespace_goal, goal)) = self.pop_goal(&mut state.goals) else {
                 return Some((state.cost, state.table));
             };
             self.push_state(state_prev);
@@ -239,9 +257,7 @@ impl<'a> Iterator for Infer<'a> {
                 continue;
             };
             state.table = table;
-            for body_term in body.into_iter().rev() {
-                state.goals.push((state.namespace, body_term));
-            }
+            self.push_goals(&mut state.goals, (state.namespace, body.iter()));
             state.rules_iter = self.rules.iter();
             self.push_state(state);
         }
@@ -256,7 +272,7 @@ fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
             cost: 0,
             namespace: 0,
             table: HashMap::new(),
-            goals: goals.into_iter().rev().map(|x| (0, x)).collect(),
+            goals: vec![(0, goals.iter())],
             rules_iter: rules.iter(),
         })]),
     }
