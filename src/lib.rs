@@ -106,7 +106,7 @@ fn occurs_check(
     r: &HashMap<(u64, &str), (u64, &Term)>,
 ) -> bool {
     match t {
-        Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, &s), (nst, &c), &r)),
+        Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, s), (nst, c), r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
         Term::Variable(s1) => r
             .get(&(nst, s1))
@@ -137,11 +137,11 @@ fn unify<'a>(
             let &(ns3, t3) = r.get(&(ns2, s)).unwrap();
             unify((ns3, t3), (ns1, t), r)
         }
-        (Term::Variable(s), t) if occurs_check((ns1, &s), (ns2, &t), &r) => {
+        (Term::Variable(s), t) if occurs_check((ns1, s), (ns2, t), &r) => {
             r.insert((ns1, s), (ns2, t));
             Some(r)
         }
-        (t, Term::Variable(s)) if occurs_check((ns2, &s), (ns1, &t), &r) => {
+        (t, Term::Variable(s)) if occurs_check((ns2, s), (ns1, t), &r) => {
             r.insert((ns2, s), (ns1, t));
             Some(r)
         }
