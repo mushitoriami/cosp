@@ -116,33 +116,29 @@ fn occurs_check(
 }
 
 fn unify<'a>(
-    (ns1, t1): (u64, &'a Term),
-    (ns2, t2): (u64, &'a Term),
+    goal1: (u64, &'a Term),
+    goal2: (u64, &'a Term),
     mut r: HashMap<(u64, &'a str), (u64, &'a Term)>,
 ) -> Option<HashMap<(u64, &'a str), (u64, &'a Term)>> {
-    match (t1, t2) {
-        (Term::Compound(s1, args1), Term::Compound(s2, args2))
+    match (goal1, goal2) {
+        ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
         {
             let mut iter = args1.iter().zip(args2.iter());
             iter.try_fold(r, |r, (c1, c2)| unify((ns1, c1), (ns2, c2), r))
         }
-        (Term::Constant(s1), Term::Constant(s2)) if s1 == s2 => Some(r),
-        (Term::Variable(s1), Term::Variable(s2)) if ns1 == ns2 && s1 == s2 => Some(r),
-        (Term::Variable(s), t) if r.contains_key(&(ns1, s)) => {
-            let &(ns3, t3) = r.get(&(ns2, s)).unwrap();
-            unify((ns3, t3), (ns2, t), r)
+        ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => Some(r),
+        ((ns1, Term::Variable(s1)), (ns2, Term::Variable(s2))) if ns1 == ns2 && s1 == s2 => Some(r),
+        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
+            if r.contains_key(&(ns, s)) =>
+        {
+            let &goal_variable = r.get(&(ns, s)).unwrap();
+            unify(goal_variable, goal, r)
         }
-        (t, Term::Variable(s)) if r.contains_key(&(ns2, s)) => {
-            let &(ns3, t3) = r.get(&(ns2, s)).unwrap();
-            unify((ns3, t3), (ns1, t), r)
-        }
-        (Term::Variable(s), t) if occurs_check((ns1, s), (ns2, t), &r) => {
-            r.insert((ns1, s), (ns2, t));
-            Some(r)
-        }
-        (t, Term::Variable(s)) if occurs_check((ns2, s), (ns1, t), &r) => {
-            r.insert((ns2, s), (ns1, t));
+        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
+            if occurs_check((ns, s), goal, &r) =>
+        {
+            r.insert((ns, s), goal);
             Some(r)
         }
         _ => None,
