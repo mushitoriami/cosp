@@ -42,24 +42,11 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
     }
 }
 
-fn take_query<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
     let term = take_term(iter)?;
     match iter.next()? {
         "," => {
-            let mut args = take_query(iter)?;
-            args.insert(0, term);
-            Some(args)
-        }
-        "." => Some(vec![term]),
-        _ => None,
-    }
-}
-
-fn take_body<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
-    let term = take_term(iter)?;
-    match iter.next()? {
-        "," => {
-            let mut args = take_body(iter)?;
+            let mut args = take_terms(iter)?;
             args.insert(0, term);
             Some(args)
         }
@@ -73,7 +60,7 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     let _ = (iter.next()? == "]").then_some(())?;
     let head = take_term(iter)?;
     match iter.next()? {
-        ":-" => Some(Rule::Rule(cost, head, take_body(iter)?)),
+        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?)),
         "." => Some(Rule::Rule(cost, head, Vec::new())),
         _ => None,
     }
@@ -102,7 +89,7 @@ fn parse_term(input: &str) -> Option<Term> {
 fn parse_query(input: &str) -> Option<Vec<Term>> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
-    let query = take_query(&mut iter)?;
+    let query = take_terms(&mut iter)?;
     iter.next().is_none().then_some(query)
 }
 
