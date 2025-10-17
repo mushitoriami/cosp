@@ -109,7 +109,7 @@ fn occurs_check(
         Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, &s), (nst, &c), &r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
         Term::Variable(s1) => r
-            .get(&(nst, s1.as_str()))
+            .get(&(nst, s1))
             .is_none_or(|&(ns1, t1)| occurs_check((nsv, s), (ns1, t1), r)),
         _ => true,
     }
@@ -129,12 +129,12 @@ fn unify<'a>(
         }
         (Term::Constant(s1), Term::Constant(s2)) if s1 == s2 => Some(r),
         (Term::Variable(s1), Term::Variable(s2)) if ns1 == ns2 && s1 == s2 => Some(r),
-        (Term::Variable(s), t) if r.contains_key(&(ns1, s.as_str())) => {
-            let &(ns3, t3) = r.get(&(ns2, s.as_str())).unwrap();
+        (Term::Variable(s), t) if r.contains_key(&(ns1, s)) => {
+            let &(ns3, t3) = r.get(&(ns2, s)).unwrap();
             unify((ns3, t3), (ns2, t), r)
         }
-        (t, Term::Variable(s)) if r.contains_key(&(ns2, s.as_str())) => {
-            let &(ns3, t3) = r.get(&(ns2, s.as_str())).unwrap();
+        (t, Term::Variable(s)) if r.contains_key(&(ns2, s)) => {
+            let &(ns3, t3) = r.get(&(ns2, s)).unwrap();
             unify((ns3, t3), (ns1, t), r)
         }
         (Term::Variable(s), t) if occurs_check((ns1, &s), (ns2, &t), &r) => {
