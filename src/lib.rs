@@ -108,10 +108,9 @@ fn occurs_check(
     match t {
         Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, &s), (nst, &c), &r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
-        Term::Variable(s1) if r.contains_key(&(nst, s1.as_str())) => {
-            let &(ns1, t1) = r.get(&(nst, s1.as_str())).unwrap();
-            occurs_check((nsv, s), (ns1, t1), r)
-        }
+        Term::Variable(s1) => r
+            .get(&(nst, s1.as_str()))
+            .is_none_or(|&(ns1, t1)| occurs_check((nsv, s), (ns1, t1), r)),
         _ => true,
     }
 }
