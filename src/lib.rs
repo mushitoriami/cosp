@@ -42,24 +42,11 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
     }
 }
 
-fn take_query<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
     let term = take_term(iter)?;
     match iter.next()? {
         "," => {
-            let mut args = take_query(iter)?;
-            args.insert(0, term);
-            Some(args)
-        }
-        "." => Some(vec![term]),
-        _ => None,
-    }
-}
-
-fn take_body<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
-    let term = take_term(iter)?;
-    match iter.next()? {
-        "," => {
-            let mut args = take_body(iter)?;
+            let mut args = take_terms(iter)?;
             args.insert(0, term);
             Some(args)
         }
@@ -73,7 +60,7 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     let _ = (iter.next()? == "]").then_some(())?;
     let head = take_term(iter)?;
     match iter.next()? {
-        ":-" => Some(Rule::Rule(cost, head, take_body(iter)?)),
+        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?)),
         "." => Some(Rule::Rule(cost, head, Vec::new())),
         _ => None,
     }
@@ -102,7 +89,7 @@ fn parse_term(input: &str) -> Option<Term> {
 fn parse_query(input: &str) -> Option<Vec<Term>> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
-    let query = take_query(&mut iter)?;
+    let query = take_terms(&mut iter)?;
     iter.next().is_none().then_some(query)
 }
 
@@ -114,53 +101,44 @@ fn parse_rules(input: &str) -> Option<Vec<Rule>> {
 }
 
 fn occurs_check(
-    nsv: u64,
-    s: &str,
-    nst: u64,
-    t: &Term,
+    (nsv, s): (u64, &str),
+    (nst, t): (u64, &Term),
     r: &HashMap<(u64, &str), (u64, &Term)>,
 ) -> bool {
     match t {
-        Term::Compound(_, args) => args.iter().all(|c| occurs_check(nsv, &s, nst, &c, &r)),
+        Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, s), (nst, c), r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
-        Term::Variable(s1) if r.contains_key(&(nst, s1.as_str())) => {
-            let &(ns1, t1) = r.get(&(nst, s1.as_str())).unwrap();
-            occurs_check(nsv, s, ns1, t1, r)
-        }
+        Term::Variable(s1) => r
+            .get(&(nst, s1))
+            .is_none_or(|&(ns1, t1)| occurs_check((nsv, s), (ns1, t1), r)),
         _ => true,
     }
 }
 
 fn unify<'a>(
-    ns1: u64,
-    t1: &'a Term,
-    ns2: u64,
-    t2: &'a Term,
+    goal1: (u64, &'a Term),
+    goal2: (u64, &'a Term),
     mut r: HashMap<(u64, &'a str), (u64, &'a Term)>,
 ) -> Option<HashMap<(u64, &'a str), (u64, &'a Term)>> {
-    match (t1, t2) {
-        (Term::Compound(s1, args1), Term::Compound(s2, args2))
+    match (goal1, goal2) {
+        ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
         {
             let mut iter = args1.iter().zip(args2.iter());
-            iter.try_fold(r, |r, (c1, c2)| unify(ns1, c1, ns2, c2, r))
+            iter.try_fold(r, |r, (c1, c2)| unify((ns1, c1), (ns2, c2), r))
         }
-        (Term::Constant(s1), Term::Constant(s2)) if s1 == s2 => Some(r),
-        (Term::Variable(s1), Term::Variable(s2)) if ns1 == ns2 && s1 == s2 => Some(r),
-        (Term::Variable(s), t) if r.contains_key(&(ns1, s.as_str())) => {
-            let &(ns3, t3) = r.get(&(ns2, s.as_str())).unwrap();
-            unify(ns3, t3, ns2, t, r)
+        ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => Some(r),
+        ((ns1, Term::Variable(s1)), (ns2, Term::Variable(s2))) if ns1 == ns2 && s1 == s2 => Some(r),
+        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
+            if r.contains_key(&(ns, s)) =>
+        {
+            let &goal_variable = r.get(&(ns, s)).unwrap();
+            unify(goal_variable, goal, r)
         }
-        (t, Term::Variable(s)) if r.contains_key(&(ns2, s.as_str())) => {
-            let &(ns3, t3) = r.get(&(ns2, s.as_str())).unwrap();
-            unify(ns3, t3, ns1, t, r)
-        }
-        (Term::Variable(s), t) if occurs_check(ns1, &s, ns2, &t, &r) => {
-            r.insert((ns1, s), (ns2, t));
-            Some(r)
-        }
-        (t, Term::Variable(s)) if occurs_check(ns2, &s, ns1, &t, &r) => {
-            r.insert((ns2, s), (ns1, t));
+        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
+            if occurs_check((ns, s), goal, &r) =>
+        {
+            r.insert((ns, s), goal);
             Some(r)
         }
         _ => None,
@@ -262,7 +240,8 @@ impl<'a> Iterator for Infer<'a> {
             if let Some((namespace, term)) = state.shared_remaining.pop() {
                 self.push_state(state.clone());
                 let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
-                let Some(table) = unify(namespace, term, namespace_goal, goal, state.table) else {
+                let Some(table) = unify((namespace, term), (namespace_goal, goal), state.table)
+                else {
                     continue;
                 };
                 state.table = table;
@@ -279,7 +258,7 @@ impl<'a> Iterator for Infer<'a> {
             let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
-            let Some(table) = unify(state.namespace, head, namespace_goal, goal, state.table)
+            let Some(table) = unify((state.namespace, head), (namespace_goal, goal), state.table)
             else {
                 continue;
             };
@@ -498,10 +477,8 @@ mod tests {
     fn test_unify_1() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("f(a* ,b* ,x? )").unwrap(),
-                1,
-                &parse_term("f(y? ,b* ,c* )").unwrap(),
+                (0, &parse_term("f(a* ,b* ,x? )").unwrap()),
+                (1, &parse_term("f(y? ,b* ,c* )").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -516,10 +493,8 @@ mod tests {
     fn test_unify_2() {
         assert_eq!(
             unify(
-                1,
-                &parse_term("f(x? ,y? )").unwrap(),
-                1,
-                &parse_term("f(a* ,b* )").unwrap(),
+                (1, &parse_term("f(x? ,y? )").unwrap()),
+                (1, &parse_term("f(a* ,b* )").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -534,10 +509,8 @@ mod tests {
     fn test_unify_3() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("x?").unwrap(),
-                0,
-                &parse_term("y?").unwrap(),
+                (0, &parse_term("x?").unwrap()),
+                (0, &parse_term("y?").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -549,10 +522,8 @@ mod tests {
     fn test_unify_4() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("f(a*,b*)").unwrap(),
-                1,
-                &parse_term("f(x?,x?)").unwrap(),
+                (0, &parse_term("f(a*,b*)").unwrap()),
+                (1, &parse_term("f(x?,x?)").unwrap()),
                 HashMap::new()
             ),
             None
@@ -563,10 +534,8 @@ mod tests {
     fn test_unify_5() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("x?").unwrap(),
-                0,
-                &parse_term("f(x?)").unwrap(),
+                (0, &parse_term("x?").unwrap()),
+                (0, &parse_term("f(x?)").unwrap()),
                 HashMap::new()
             ),
             None
@@ -577,10 +546,8 @@ mod tests {
     fn test_unify_6() {
         assert_eq!(
             unify(
-                1,
-                &parse_term("f(f(x?),g(y?))").unwrap(),
-                1,
-                &parse_term("f(y?,x?)").unwrap(),
+                (1, &parse_term("f(f(x?),g(y?))").unwrap()),
+                (1, &parse_term("f(y?,x?)").unwrap()),
                 HashMap::new()
             ),
             None
@@ -591,10 +558,8 @@ mod tests {
     fn test_unify_7() {
         assert_eq!(
             unify(
-                1,
-                &parse_term("g(x?,y?,x?)").unwrap(),
-                1,
-                &parse_term("g(f(x?),f(y?),y?)").unwrap(),
+                (1, &parse_term("g(x?,y?,x?)").unwrap()),
+                (1, &parse_term("g(f(x?),f(y?),y?)").unwrap()),
                 HashMap::new()
             ),
             None
@@ -605,10 +570,8 @@ mod tests {
     fn test_unify_8() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("x?").unwrap(),
-                0,
-                &parse_term("x?").unwrap(),
+                (0, &parse_term("x?").unwrap()),
+                (0, &parse_term("x?").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -620,10 +583,8 @@ mod tests {
     fn test_unify_9() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("x?").unwrap(),
-                1,
-                &parse_term("f(x?)").unwrap(),
+                (0, &parse_term("x?").unwrap()),
+                (1, &parse_term("f(x?)").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -635,10 +596,8 @@ mod tests {
     fn test_unify_10() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("x?").unwrap(),
-                1,
-                &parse_term("x?").unwrap(),
+                (0, &parse_term("x?").unwrap()),
+                (1, &parse_term("x?").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -650,10 +609,8 @@ mod tests {
     fn test_unify_11() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("f(f(x?),g(y?))").unwrap(),
-                1,
-                &parse_term("f(y?,x?)").unwrap(),
+                (0, &parse_term("f(f(x?),g(y?))").unwrap()),
+                (1, &parse_term("f(y?,x?)").unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -668,10 +625,8 @@ mod tests {
     fn test_unify_12() {
         assert_eq!(
             unify(
-                0,
-                &parse_term("f(f(x?), x?)").unwrap(),
-                1,
-                &parse_term("f(x?,x?)").unwrap(),
+                (0, &parse_term("f(f(x?), x?)").unwrap()),
+                (1, &parse_term("f(x?,x?)").unwrap()),
                 HashMap::new()
             ),
             None
