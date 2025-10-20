@@ -16,16 +16,6 @@ enum Rule {
     Rule(u64, Term, Vec<Term>),
 }
 
-fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
-    let mut res = Vec::new();
-    for (&(ns, label), &goal) in table {
-        if ns == 0 {
-            res.push(String::new() + label + " = " + &stringify_goal(goal, table) + "\n");
-        }
-    }
-    res
-}
-
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
         (ns, Term::Compound(label, args)) => {
@@ -41,6 +31,16 @@ fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>
             None => label.clone() + "#" + &ns.to_string(),
         },
     }
+}
+
+fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
+    let mut res = Vec::new();
+    for (&(ns, label), &goal) in table {
+        if ns == 0 {
+            res.push(String::new() + label + " = " + &stringify_goal(goal, table) + "\n");
+        }
+    }
+    res
 }
 
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
