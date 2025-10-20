@@ -17,7 +17,20 @@ enum Rule {
 }
 
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
-    todo!();
+    match goal {
+        (ns, Term::Compound(label, args)) => {
+            let goals_string: Vec<String> = args
+                .into_iter()
+                .map(|x| stringify_goal((ns, x), table))
+                .collect();
+            label.clone() + "(" + &goals_string.join(", ") + ")"
+        }
+        (_, Term::Constant(label)) => label.clone() + "*",
+        (ns, Term::Variable(label)) => match table.get(&(ns, label)) {
+            Some(&goal) => stringify_goal(goal, table),
+            None => label.clone() + "#" + &ns.to_string(),
+        },
+    }
 }
 
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
