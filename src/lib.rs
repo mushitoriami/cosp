@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::slice::Iter;
 
 #[derive(Debug, PartialEq)]
@@ -14,6 +15,16 @@ enum Term {
 #[derive(Debug, PartialEq)]
 enum Rule {
     Rule(u64, Term, Vec<Term>),
+}
+
+fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
+    let mut res = Vec::new();
+    for (&(ns, label), &goal) in table {
+        if ns == 0 {
+            res.push(String::new() + label + " = " + &stringify_goal(goal, table) + "\n");
+        }
+    }
+    res
 }
 
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
@@ -355,6 +366,18 @@ mod tests {
                 &HashMap::from([((2, "x"), (1, &parse_term("ab(c_d(e_f*),g_h?)").unwrap()))])
             ),
             "f(a*, b*, ab(c_d(e_f*), g_h#1))"
+        );
+    }
+
+    #[test]
+    fn test_stringify_table_1() {
+        assert_eq!(
+            HashSet::from_iter(stringify_table(&HashMap::from([
+                ((0, "x"), (1, &parse_term("x?").unwrap())),
+                ((1, "x"), (2, &parse_term("x?").unwrap())),
+                ((0, "y"), (1, &parse_term("x?").unwrap()))
+            ]))),
+            ["x = x#2\n".into(), "y = x#2\n".into()].into()
         );
     }
 
