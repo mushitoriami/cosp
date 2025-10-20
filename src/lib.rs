@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::slice::Iter;
 
 #[derive(Debug, PartialEq)]
@@ -371,14 +370,14 @@ mod tests {
 
     #[test]
     fn test_stringify_table_1() {
-        assert_eq!(
-            HashSet::from_iter(stringify_table(&HashMap::from([
-                ((0, "x"), (1, &parse_term("x?").unwrap())),
-                ((1, "x"), (2, &parse_term("x?").unwrap())),
-                ((0, "y"), (1, &parse_term("x?").unwrap()))
-            ]))),
-            ["x = x#2\n".into(), "y = x#2\n".into()].into()
-        );
+        let strings = stringify_table(&HashMap::from([
+            ((0, "x"), (1, &parse_term("x?").unwrap())),
+            ((1, "x"), (2, &parse_term("x?").unwrap())),
+            ((0, "y"), (1, &parse_term("x?").unwrap())),
+        ]));
+        assert_eq!(strings.len(), 2);
+        assert!(strings.contains(&"x = x#2\n".into()));
+        assert!(strings.contains(&"y = x#2\n".into()));
     }
 
     #[test]
