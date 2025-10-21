@@ -5,14 +5,14 @@ use std::collections::HashMap;
 use std::slice::Iter;
 
 #[derive(Debug, PartialEq)]
-enum Term {
+pub enum Term {
     Constant(String),
     Variable(String),
     Compound(String, Vec<Term>),
 }
 
 #[derive(Debug, PartialEq)]
-enum Rule {
+pub enum Rule {
     Rule(u64, Term, Vec<Term>),
 }
 
@@ -33,7 +33,7 @@ fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>
     }
 }
 
-fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
+pub fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
     let mut res = Vec::new();
     for (&(ns, label), &goal) in table {
         if ns == 0 {
@@ -106,21 +106,21 @@ fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Rule>>
     }
 }
 
-fn parse_term(input: &str) -> Option<Term> {
+pub fn parse_term(input: &str) -> Option<Term> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let term = take_term(&mut iter)?;
     iter.next().is_none().then_some(term)
 }
 
-fn parse_query(input: &str) -> Option<Vec<Term>> {
+pub fn parse_query(input: &str) -> Option<Vec<Term>> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let query = take_terms(&mut iter)?;
     iter.next().is_none().then_some(query)
 }
 
-fn parse_rules(input: &str) -> Option<Vec<Rule>> {
+pub fn parse_rules(input: &str) -> Option<Vec<Rule>> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", ".", ":-", "[", "]"]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let rules = take_rules(&mut iter)?;
@@ -203,7 +203,7 @@ impl Ord for State<'_> {
     }
 }
 
-struct Infer<'a> {
+pub struct Infer<'a> {
     rules: &'a [Rule],
     stack: Vec<Reverse<State<'a>>>,
     pq: BinaryHeap<Reverse<State<'a>>>,
@@ -299,7 +299,7 @@ impl<'a> Iterator for Infer<'a> {
     }
 }
 
-fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
+pub fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
     Infer {
         rules: rules,
         stack: vec![],
