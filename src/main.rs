@@ -32,17 +32,10 @@ fn main() {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
         };
-        match cosp::infer(&query, &rules) {
-            Some((cost, table)) => {
-                print!("{}", cosp::stringify_table(&table).join(""));
-                println!("{}.", cost)
-            }
-            None => println!("inf"),
+        let Some((cost, table)) = cosp::infer(&query, &rules) else {
+            println!("inf.");
+            continue;
         };
+        println!("{}{}.", cosp::stringify_table(&table).join(""), cost);
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
