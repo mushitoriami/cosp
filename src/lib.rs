@@ -33,6 +33,16 @@ fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>
     }
 }
 
+fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
+    let mut res = Vec::new();
+    for (&(ns, label), &goal) in table {
+        if ns == 0 {
+            res.push(String::new() + label + " = " + &stringify_goal(goal, table) + "\n");
+        }
+    }
+    res
+}
+
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
     let term = take_term(iter)?;
     match iter.next()? {
@@ -356,6 +366,18 @@ mod tests {
             ),
             "f(a*, b*, ab(c_d(e_f*), g_h#1))"
         );
+    }
+
+    #[test]
+    fn test_stringify_table_1() {
+        let strings = stringify_table(&HashMap::from([
+            ((0, "x"), (1, &parse_term("x?").unwrap())),
+            ((1, "x"), (2, &parse_term("x?").unwrap())),
+            ((0, "y"), (1, &parse_term("x?").unwrap())),
+        ]));
+        assert_eq!(strings.len(), 2);
+        assert!(strings.contains(&"x = x#2\n".into()));
+        assert!(strings.contains(&"y = x#2\n".into()));
     }
 
     #[test]
