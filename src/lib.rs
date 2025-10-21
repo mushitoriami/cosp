@@ -16,6 +16,23 @@ enum Rule {
     Rule(u64, Term, Vec<Term>),
 }
 
+fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
+    match goal {
+        (ns, Term::Compound(label, args)) => {
+            let goals_string: Vec<String> = args
+                .into_iter()
+                .map(|x| stringify_goal((ns, x), table))
+                .collect();
+            label.clone() + "(" + &goals_string.join(", ") + ")"
+        }
+        (_, Term::Constant(label)) => label.clone() + "*",
+        (ns, Term::Variable(label)) => match table.get(&(ns, label)) {
+            Some(&goal) => stringify_goal(goal, table),
+            None => label.clone() + "#" + &ns.to_string(),
+        },
+    }
+}
+
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
     let term = take_term(iter)?;
     match iter.next()? {
@@ -291,6 +308,55 @@ fn infer<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_stringify_goal_1() {
+        assert_eq!(
+            stringify_goal((0, &parse_term("a*").unwrap()), &HashMap::new()),
+            "a*"
+        );
+    }
+
+    #[test]
+    fn test_stringify_goal_2() {
+        assert_eq!(
+            stringify_goal((0, &parse_term("x?").unwrap()), &HashMap::new()),
+            "x#0"
+        );
+    }
+
+    #[test]
+    fn test_stringify_goal_3() {
+        assert_eq!(
+            stringify_goal(
+                (2, &parse_term("x?").unwrap()),
+                &HashMap::from([((2, "x"), (1, &parse_term("y?").unwrap()))])
+            ),
+            "y#1"
+        );
+    }
+
+    #[test]
+    fn test_stringify_goal_4() {
+        assert_eq!(
+            stringify_goal(
+                (0, &parse_term("ab(c_d(e_f*),g_h?)").unwrap()),
+                &HashMap::new()
+            ),
+            "ab(c_d(e_f*), g_h#0)"
+        );
+    }
+
+    #[test]
+    fn test_stringify_goal_5() {
+        assert_eq!(
+            stringify_goal(
+                (2, &parse_term("f(a*, b*, x?)").unwrap()),
+                &HashMap::from([((2, "x"), (1, &parse_term("ab(c_d(e_f*),g_h?)").unwrap()))])
+            ),
+            "f(a*, b*, ab(c_d(e_f*), g_h#1))"
+        );
+    }
 
     #[test]
     fn test_parse_term_1() {
