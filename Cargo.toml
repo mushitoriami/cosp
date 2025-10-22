@@ -2,6 +2,10 @@
 name = "cosp"
 version = "0.0.1"
 edition = "2024"
+description = "A Prolog-like logic inference system with cost-aware reasoning."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/mushitoriami/cosp"
 
 [dependencies]
 kohaku = "0.1.4"
