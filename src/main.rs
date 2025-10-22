@@ -32,7 +32,7 @@ fn main() {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
         };
-        match cosp::infer(&query, &rules).next() {
+        match cosp::infer(&query, &rules) {
             Some((cost, table)) => {
                 print!("{}", cosp::stringify_table(&table).join(""));
                 println!("{}.", cost)
