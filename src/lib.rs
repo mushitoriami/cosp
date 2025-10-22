@@ -37,7 +37,7 @@ pub fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String
     let mut res = Vec::new();
     for (&(ns, label), &goal) in table {
         if ns == 0 {
-            res.push(String::new() + label + " = " + &stringify_goal(goal, table) + "\n");
+            res.push(label.to_string() + " = " + &stringify_goal(goal, table) + "\n");
         }
     }
     res

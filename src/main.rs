@@ -25,24 +25,17 @@ fn main() {
     };
     loop {
         let mut input = String::new();
-        print!(":- ");
+        print!("?- ");
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_line(&mut input).unwrap();
         let Some(query) = cosp::parse_query(input.trim_end()) else {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
         };
-        match cosp::infer(&query, &rules) {
-            Some((cost, table)) => {
-                print!("{}", cosp::stringify_table(&table).join(""));
-                println!("{}.", cost)
-            }
-            None => println!("inf"),
+        let Some((cost, table)) = cosp::infer(&query, &rules) else {
+            println!("inf.");
+            continue;
         };
+        println!("{}{}.", cosp::stringify_table(&table).join(""), cost);
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
