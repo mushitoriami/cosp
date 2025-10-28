@@ -173,47 +173,47 @@ fn unify<'a>(
 }
 
 #[derive(Clone)]
-struct State<'a> {
+struct State<'a, RulesIter: Clone> {
     cost: u64,
     namespace: u64,
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, Iter<'a, Term>)>,
-    rules_iter: Iter<'a, Rule>,
+    rules_iter: RulesIter,
 }
 
-impl Eq for State<'_> {}
+impl<RulesIter: Clone> Eq for State<'_, RulesIter> {}
 
-impl PartialEq for State<'_> {
+impl<RulesIter: Clone> PartialEq for State<'_, RulesIter> {
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost
     }
 }
 
-impl PartialOrd for State<'_> {
+impl<RulesIter: Clone> PartialOrd for State<'_, RulesIter> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for State<'_> {
+impl<RulesIter: Clone> Ord for State<'_, RulesIter> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cost.cmp(&other.cost)
     }
 }
 
-struct Infer<'a> {
-    rules_iter: Iter<'a, Rule>,
-    pq: BinaryHeap<Reverse<State<'a>>>,
+struct Infer<'a, RulesIter: Clone> {
+    rules_iter: RulesIter,
+    pq: BinaryHeap<Reverse<State<'a, RulesIter>>>,
 }
 
-impl<'a> Infer<'a> {
-    fn push_state(&mut self, state: State<'a>) {
+impl<'a, RulesIter: Clone> Infer<'a, RulesIter> {
+    fn push_state(&mut self, state: State<'a, RulesIter>) {
         self.pq.push(Reverse(state))
     }
 
-    fn pop_state(&mut self) -> Option<State<'a>> {
+    fn pop_state(&mut self) -> Option<State<'a, RulesIter>> {
         self.pq.pop().map(|x| x.0)
     }
 
@@ -248,7 +248,7 @@ impl<'a> Infer<'a> {
     }
 }
 
-impl<'a> Iterator for Infer<'a> {
+impl<'a, RulesIter: Clone + Iterator<Item = &'a Rule>> Iterator for Infer<'a, RulesIter> {
     type Item = (u64, HashMap<(u64, &'a str), (u64, &'a Term)>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -292,7 +292,10 @@ impl<'a> Iterator for Infer<'a> {
     }
 }
 
-fn infer_iter<'a>(goals: &'a [Term], rules_iter: Iter<'a, Rule>) -> Infer<'a> {
+fn infer_iter<'a, RulesIter: Clone + Iterator<Item = &'a Rule>>(
+    goals: &'a [Term],
+    rules_iter: RulesIter,
+) -> Infer<'a, RulesIter> {
     Infer {
         rules_iter: rules_iter.clone(),
         pq: BinaryHeap::from([Reverse(State {
@@ -307,9 +310,9 @@ fn infer_iter<'a>(goals: &'a [Term], rules_iter: Iter<'a, Rule>) -> Infer<'a> {
     }
 }
 
-pub fn infer<'a>(
+pub fn infer<'a, RulesIter: Clone + Iterator<Item = &'a Rule>>(
     goals: &'a [Term],
-    rules_iter: Iter<'a, Rule>,
+    rules_iter: RulesIter,
 ) -> Option<(u64, HashMap<(u64, &'a str), (u64, &'a Term)>)> {
     infer_iter(goals, rules_iter).next()
 }
