@@ -32,7 +32,7 @@ fn main() {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
         };
-        let Some((cost, table)) = cosp::infer(&query, &rules) else {
+        let Some((cost, table)) = cosp::infer(&query, rules.iter()) else {
             println!("inf.");
             continue;
         };
