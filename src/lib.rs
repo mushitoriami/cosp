@@ -3,6 +3,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::slice::Iter;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 pub enum Term {
@@ -106,11 +107,14 @@ fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Rule>>
     }
 }
 
-pub fn parse_term(input: &str) -> Option<Term> {
-    let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
-    let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
-    let term = take_term(&mut iter)?;
-    iter.next().is_none().then_some(term)
+impl FromStr for Term {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
+        let mut iter = tokenizer.tokenize(s).map_while(|x| x.ok());
+        let term = take_term(&mut iter).ok_or(())?;
+        iter.next().is_none().then_some(term).ok_or(())
+    }
 }
 
 pub fn parse_query(input: &str) -> Option<Vec<Term>> {
@@ -333,7 +337,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_1() {
         assert_eq!(
-            stringify_goal((0, &parse_term("a*").unwrap()), &HashMap::new()),
+            stringify_goal((0, &"a*".parse().unwrap()), &HashMap::new()),
             "a*"
         );
     }
@@ -341,7 +345,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_2() {
         assert_eq!(
-            stringify_goal((0, &parse_term("x?").unwrap()), &HashMap::new()),
+            stringify_goal((0, &"x?".parse().unwrap()), &HashMap::new()),
             "x#0"
         );
     }
@@ -350,8 +354,8 @@ mod tests {
     fn test_stringify_goal_3() {
         assert_eq!(
             stringify_goal(
-                (2, &parse_term("x?").unwrap()),
-                &HashMap::from([((2, "x"), (1, &parse_term("y?").unwrap()))])
+                (2, &"x?".parse().unwrap()),
+                &HashMap::from([((2, "x"), (1, &"y?".parse().unwrap()))])
             ),
             "y#1"
         );
@@ -360,10 +364,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_4() {
         assert_eq!(
-            stringify_goal(
-                (0, &parse_term("ab(c_d(e_f*),g_h?)").unwrap()),
-                &HashMap::new()
-            ),
+            stringify_goal((0, &"ab(c_d(e_f*),g_h?)".parse().unwrap()), &HashMap::new()),
             "ab(c_d(e_f*), g_h#0)"
         );
     }
@@ -372,8 +373,8 @@ mod tests {
     fn test_stringify_goal_5() {
         assert_eq!(
             stringify_goal(
-                (2, &parse_term("f(a*, b*, x?)").unwrap()),
-                &HashMap::from([((2, "x"), (1, &parse_term("ab(c_d(e_f*),g_h?)").unwrap()))])
+                (2, &"f(a*, b*, x?)".parse().unwrap()),
+                &HashMap::from([((2, "x"), (1, &"ab(c_d(e_f*),g_h?)".parse().unwrap()))])
             ),
             "f(a*, b*, ab(c_d(e_f*), g_h#1))"
         );
@@ -382,9 +383,9 @@ mod tests {
     #[test]
     fn test_stringify_table_1() {
         let strings = stringify_table(&HashMap::from([
-            ((0, "x"), (1, &parse_term("x?").unwrap())),
-            ((1, "x"), (2, &parse_term("x?").unwrap())),
-            ((0, "y"), (1, &parse_term("x?").unwrap())),
+            ((0, "x"), (1, &"x?".parse().unwrap())),
+            ((1, "x"), (2, &"x?".parse().unwrap())),
+            ((0, "y"), (1, &"x?".parse().unwrap())),
         ]));
         assert_eq!(strings.len(), 2);
         assert!(strings.contains(&"x = x#2\n".into()));
@@ -394,8 +395,8 @@ mod tests {
     #[test]
     fn test_parse_term_1() {
         assert_eq!(
-            parse_term("ab(c_d(e_f*),g_h?)"),
-            Some(Term::Compound(
+            "ab(c_d(e_f*),g_h?)".parse(),
+            Ok(Term::Compound(
                 String::from("ab"),
                 vec![
                     Term::Compound(
@@ -410,59 +411,59 @@ mod tests {
 
     #[test]
     fn test_parse_term_2() {
-        assert_eq!(parse_term("ab(c_d(*e_f),?g_h)))("), None);
+        assert_eq!("ab(c_d(*e_f),?g_h)))(".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_3() {
-        assert_eq!(parse_term("a*("), None);
+        assert_eq!("a*(".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_4() {
-        assert_eq!(parse_term("a,a*)"), None);
+        assert_eq!("a,a*)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_5() {
-        assert_eq!(parse_term("a(b*(c*)"), None);
+        assert_eq!("a(b*(c*)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_6() {
-        assert_eq!(parse_term("a)"), None);
+        assert_eq!("a)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_7() {
-        assert_eq!(parse_term("a(b**"), None);
+        assert_eq!("a(b**".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_8() {
-        assert_eq!(parse_term("a(*)"), None);
+        assert_eq!("a(*)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_9() {
-        assert_eq!(parse_term("(a*)"), None);
+        assert_eq!("(a*)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_10() {
-        assert_eq!(parse_term("a*a"), None);
+        assert_eq!("a*a".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_11() {
-        assert_eq!(parse_term("a(a*a)"), None);
+        assert_eq!("a(a*a)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_12() {
         assert_eq!(
-            parse_term("f(a*, b*, x?)"),
-            Some(Term::Compound(
+            "f(a*, b*, x?)".parse(),
+            Ok(Term::Compound(
                 String::from("f"),
                 vec![
                     Term::Constant(String::from("a")),
@@ -475,22 +476,22 @@ mod tests {
 
     #[test]
     fn test_parse_term_13() {
-        assert_eq!(parse_term("f(a, b, X)"), None);
+        assert_eq!("f(a, b, X)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_14() {
-        assert_eq!(parse_term("f(*a, *b, ?x)"), None);
+        assert_eq!("f(*a, *b, ?x)".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_15() {
-        assert_eq!(parse_term("ab(c_d(e_f),g_h)))("), None);
+        assert_eq!("ab(c_d(e_f),g_h)))(".parse::<Term>(), Err(()));
     }
 
     #[test]
     fn test_parse_term_16() {
-        assert_eq!(parse_term("ab(c_d(e_f*),g_h?)))("), None);
+        assert_eq!("ab(c_d(e_f*),g_h?)))(".parse::<Term>(), Err(()));
     }
 
     #[test]
@@ -576,14 +577,14 @@ mod tests {
     fn test_unify_1() {
         assert_eq!(
             unify(
-                (0, &parse_term("f(a* ,b* ,x? )").unwrap()),
-                (1, &parse_term("f(y? ,b* ,c* )").unwrap()),
+                (0, &"f(a* ,b* ,x? )".parse().unwrap()),
+                (1, &"f(y? ,b* ,c* )".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
             HashMap::from([
-                ((0, "x"), (1, &parse_term("c*").unwrap())),
-                ((1, "y"), (0, &parse_term("a*").unwrap()))
+                ((0, "x"), (1, &"c*".parse().unwrap())),
+                ((1, "y"), (0, &"a*".parse().unwrap()))
             ])
         )
     }
@@ -592,14 +593,14 @@ mod tests {
     fn test_unify_2() {
         assert_eq!(
             unify(
-                (1, &parse_term("f(x? ,y? )").unwrap()),
-                (1, &parse_term("f(a* ,b* )").unwrap()),
+                (1, &"f(x? ,y? )".parse().unwrap()),
+                (1, &"f(a* ,b* )".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
             HashMap::from([
-                ((1, "x"), (1, &parse_term("a*").unwrap())),
-                ((1, "y"), (1, &parse_term("b*").unwrap()))
+                ((1, "x"), (1, &"a*".parse().unwrap())),
+                ((1, "y"), (1, &"b*".parse().unwrap()))
             ])
         )
     }
@@ -608,12 +609,12 @@ mod tests {
     fn test_unify_3() {
         assert_eq!(
             unify(
-                (0, &parse_term("x?").unwrap()),
-                (0, &parse_term("y?").unwrap()),
+                (0, &"x?".parse().unwrap()),
+                (0, &"y?".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
-            HashMap::from([((0, "x"), (0, &parse_term("y?").unwrap()))])
+            HashMap::from([((0, "x"), (0, &"y?".parse().unwrap()))])
         )
     }
 
@@ -621,8 +622,8 @@ mod tests {
     fn test_unify_4() {
         assert_eq!(
             unify(
-                (0, &parse_term("f(a*,b*)").unwrap()),
-                (1, &parse_term("f(x?,x?)").unwrap()),
+                (0, &"f(a*,b*)".parse().unwrap()),
+                (1, &"f(x?,x?)".parse().unwrap()),
                 HashMap::new()
             ),
             None
@@ -633,8 +634,8 @@ mod tests {
     fn test_unify_5() {
         assert_eq!(
             unify(
-                (0, &parse_term("x?").unwrap()),
-                (0, &parse_term("f(x?)").unwrap()),
+                (0, &"x?".parse().unwrap()),
+                (0, &"f(x?)".parse().unwrap()),
                 HashMap::new()
             ),
             None
@@ -645,8 +646,8 @@ mod tests {
     fn test_unify_6() {
         assert_eq!(
             unify(
-                (1, &parse_term("f(f(x?),g(y?))").unwrap()),
-                (1, &parse_term("f(y?,x?)").unwrap()),
+                (1, &"f(f(x?),g(y?))".parse().unwrap()),
+                (1, &"f(y?,x?)".parse().unwrap()),
                 HashMap::new()
             ),
             None
@@ -657,8 +658,8 @@ mod tests {
     fn test_unify_7() {
         assert_eq!(
             unify(
-                (1, &parse_term("g(x?,y?,x?)").unwrap()),
-                (1, &parse_term("g(f(x?),f(y?),y?)").unwrap()),
+                (1, &"g(x?,y?,x?)".parse().unwrap()),
+                (1, &"g(f(x?),f(y?),y?)".parse().unwrap()),
                 HashMap::new()
             ),
             None
@@ -669,8 +670,8 @@ mod tests {
     fn test_unify_8() {
         assert_eq!(
             unify(
-                (0, &parse_term("x?").unwrap()),
-                (0, &parse_term("x?").unwrap()),
+                (0, &"x?".parse().unwrap()),
+                (0, &"x?".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
@@ -682,12 +683,12 @@ mod tests {
     fn test_unify_9() {
         assert_eq!(
             unify(
-                (0, &parse_term("x?").unwrap()),
-                (1, &parse_term("f(x?)").unwrap()),
+                (0, &"x?".parse().unwrap()),
+                (1, &"f(x?)".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
-            HashMap::from([((0, "x"), (1, &parse_term("f(x?)").unwrap()))])
+            HashMap::from([((0, "x"), (1, &"f(x?)".parse().unwrap()))])
         )
     }
 
@@ -695,12 +696,12 @@ mod tests {
     fn test_unify_10() {
         assert_eq!(
             unify(
-                (0, &parse_term("x?").unwrap()),
-                (1, &parse_term("x?").unwrap()),
+                (0, &"x?".parse().unwrap()),
+                (1, &"x?".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
-            HashMap::from([((0, "x"), (1, &parse_term("x?").unwrap()))])
+            HashMap::from([((0, "x"), (1, &"x?".parse().unwrap()))])
         )
     }
 
@@ -708,14 +709,14 @@ mod tests {
     fn test_unify_11() {
         assert_eq!(
             unify(
-                (0, &parse_term("f(f(x?),g(y?))").unwrap()),
-                (1, &parse_term("f(y?,x?)").unwrap()),
+                (0, &"f(f(x?),g(y?))".parse().unwrap()),
+                (1, &"f(y?,x?)".parse().unwrap()),
                 HashMap::new()
             )
             .unwrap(),
             HashMap::from([
-                ((1, "x"), (0, &parse_term("g(y?)").unwrap())),
-                ((1, "y"), (0, &parse_term("f(x?)").unwrap()))
+                ((1, "x"), (0, &"g(y?)".parse().unwrap())),
+                ((1, "y"), (0, &"f(x?)".parse().unwrap()))
             ])
         )
     }
@@ -724,8 +725,8 @@ mod tests {
     fn test_unify_12() {
         assert_eq!(
             unify(
-                (0, &parse_term("f(f(x?), x?)").unwrap()),
-                (1, &parse_term("f(x?,x?)").unwrap()),
+                (0, &"f(f(x?), x?)".parse().unwrap()),
+                (1, &"f(x?,x?)".parse().unwrap()),
                 HashMap::new()
             ),
             None
@@ -779,7 +780,7 @@ mod tests {
             infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
             [(
                 0,
-                HashMap::from([((0, "x"), (1, &parse_term("tom*").unwrap()))])
+                HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
             )]
         );
     }
@@ -793,11 +794,11 @@ mod tests {
         assert!(res.len() == 2);
         assert!(res.contains(&(
             0,
-            HashMap::from([((0, "y"), (1, &parse_term("ann*").unwrap()))])
+            HashMap::from([((0, "y"), (1, &"ann*".parse().unwrap()))])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([((0, "y"), (1, &parse_term("pat*").unwrap()))])
+            HashMap::from([((0, "y"), (1, &"pat*".parse().unwrap()))])
         )));
     }
 
@@ -811,43 +812,43 @@ mod tests {
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("pam*").unwrap())),
-                ((0, "q"), (1, &parse_term("bob*").unwrap()))
+                ((0, "p"), (1, &"pam*".parse().unwrap())),
+                ((0, "q"), (1, &"bob*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                ((0, "q"), (1, &parse_term("bob*").unwrap()))
+                ((0, "p"), (1, &"tom*".parse().unwrap())),
+                ((0, "q"), (1, &"bob*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                ((0, "q"), (1, &parse_term("liz*").unwrap()))
+                ((0, "p"), (1, &"tom*".parse().unwrap())),
+                ((0, "q"), (1, &"liz*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                ((0, "q"), (1, &parse_term("ann*").unwrap()))
+                ((0, "p"), (1, &"bob*".parse().unwrap())),
+                ((0, "q"), (1, &"ann*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                ((0, "q"), (1, &parse_term("pat*").unwrap()))
+                ((0, "p"), (1, &"bob*".parse().unwrap())),
+                ((0, "q"), (1, &"pat*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "p"), (1, &parse_term("pat*").unwrap())),
-                ((0, "q"), (1, &parse_term("jim*").unwrap()))
+                ((0, "p"), (1, &"pat*".parse().unwrap())),
+                ((0, "q"), (1, &"jim*".parse().unwrap()))
             ])
         )));
     }
@@ -861,8 +862,8 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((0, "y"), (1, &parse_term("pat*").unwrap())),
-                    ((0, "x"), (2, &parse_term("bob*").unwrap()))
+                    ((0, "y"), (1, &"pat*".parse().unwrap())),
+                    ((0, "x"), (2, &"bob*".parse().unwrap()))
                 ])
             )]
         )
@@ -878,15 +879,15 @@ mod tests {
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                ((0, "y"), (2, &parse_term("ann*").unwrap()))
+                ((0, "x"), (1, &"bob*".parse().unwrap())),
+                ((0, "y"), (2, &"ann*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
             HashMap::from([
-                ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                ((0, "y"), (2, &parse_term("pat*").unwrap()))
+                ((0, "x"), (1, &"bob*".parse().unwrap())),
+                ((0, "y"), (2, &"pat*".parse().unwrap()))
             ])
         )));
     }
@@ -899,7 +900,7 @@ mod tests {
             infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
             [(
                 0,
-                HashMap::from([((0, "x"), (1, &parse_term("bob*").unwrap()))])
+                HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
             )]
         )
     }
@@ -913,8 +914,8 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                    ((0, "y"), (2, &parse_term("pat*").unwrap()))
+                    ((0, "x"), (1, &"bob*".parse().unwrap())),
+                    ((0, "y"), (2, &"pat*".parse().unwrap()))
                 ])
             )]
         )
@@ -940,8 +941,8 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((1, "z"), (0, &parse_term("x?").unwrap())),
-                    ((0, "x"), (2, &parse_term("bear*").unwrap()))
+                    ((1, "z"), (0, &"x?".parse().unwrap())),
+                    ((0, "x"), (2, &"bear*".parse().unwrap()))
                 ])
             )]
         )
@@ -978,11 +979,11 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((1, "x"), (0, &parse_term("tom*").unwrap())),
-                    ((1, "z"), (0, &parse_term("pat*").unwrap())),
-                    ((1, "y"), (2, &parse_term("bob*").unwrap())),
-                    ((3, "x"), (2, &parse_term("bob*").unwrap())),
-                    ((3, "z"), (0, &parse_term("pat*").unwrap()))
+                    ((1, "x"), (0, &"tom*".parse().unwrap())),
+                    ((1, "z"), (0, &"pat*".parse().unwrap())),
+                    ((1, "y"), (2, &"bob*".parse().unwrap())),
+                    ((3, "x"), (2, &"bob*".parse().unwrap())),
+                    ((3, "z"), (0, &"pat*".parse().unwrap()))
                 ])
             )]
         )
@@ -1007,8 +1008,8 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((1, "x"), (0, &parse_term("pam*").unwrap())),
-                    ((1, "y"), (0, &parse_term("bob*").unwrap()))
+                    ((1, "x"), (0, &"pam*".parse().unwrap())),
+                    ((1, "y"), (0, &"bob*".parse().unwrap()))
                 ])
             )]
         )
@@ -1023,9 +1024,9 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((1, "x"), (0, &parse_term("pam*").unwrap())),
-                    ((1, "z"), (0, &parse_term("ann*").unwrap())),
-                    ((1, "y"), (2, &parse_term("bob*").unwrap()))
+                    ((1, "x"), (0, &"pam*".parse().unwrap())),
+                    ((1, "z"), (0, &"ann*".parse().unwrap())),
+                    ((1, "y"), (2, &"bob*".parse().unwrap()))
                 ])
             )]
         )
@@ -1040,9 +1041,9 @@ mod tests {
             [(
                 0,
                 HashMap::from([
-                    ((1, "x"), (0, &parse_term("bob*").unwrap())),
-                    ((1, "z"), (0, &parse_term("jim*").unwrap())),
-                    ((1, "y"), (2, &parse_term("pat*").unwrap()))
+                    ((1, "x"), (0, &"bob*".parse().unwrap())),
+                    ((1, "z"), (0, &"jim*".parse().unwrap())),
+                    ((1, "y"), (2, &"pat*".parse().unwrap()))
                 ])
             )]
         )
@@ -1095,7 +1096,7 @@ mod tests {
             infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
             [(
                 4,
-                HashMap::from([((0, "x"), (1, &parse_term("tom*").unwrap()))])
+                HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
             )]
         );
     }
@@ -1109,11 +1110,11 @@ mod tests {
             [
                 (
                     2,
-                    HashMap::from([((0, "y"), (1, &parse_term("pat*").unwrap()))])
+                    HashMap::from([((0, "y"), (1, &"pat*".parse().unwrap()))])
                 ),
                 (
                     3,
-                    HashMap::from([((0, "y"), (1, &parse_term("ann*").unwrap()))])
+                    HashMap::from([((0, "y"), (1, &"ann*".parse().unwrap()))])
                 )
             ]
         );
@@ -1129,43 +1130,43 @@ mod tests {
                 (
                     1,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("pat*").unwrap())),
-                        ((0, "q"), (1, &parse_term("jim*").unwrap()))
+                        ((0, "p"), (1, &"pat*".parse().unwrap())),
+                        ((0, "q"), (1, &"jim*".parse().unwrap()))
                     ])
                 ),
                 (
                     2,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "q"), (1, &parse_term("pat*").unwrap()))
+                        ((0, "p"), (1, &"bob*".parse().unwrap())),
+                        ((0, "q"), (1, &"pat*".parse().unwrap()))
                     ])
                 ),
                 (
                     3,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "q"), (1, &parse_term("ann*").unwrap()))
+                        ((0, "p"), (1, &"bob*".parse().unwrap())),
+                        ((0, "q"), (1, &"ann*".parse().unwrap()))
                     ])
                 ),
                 (
                     4,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                        ((0, "q"), (1, &parse_term("liz*").unwrap()))
+                        ((0, "p"), (1, &"tom*".parse().unwrap())),
+                        ((0, "q"), (1, &"liz*".parse().unwrap()))
                     ])
                 ),
                 (
                     5,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                        ((0, "q"), (1, &parse_term("bob*").unwrap()))
+                        ((0, "p"), (1, &"tom*".parse().unwrap())),
+                        ((0, "q"), (1, &"bob*".parse().unwrap()))
                     ])
                 ),
                 (
                     6,
                     HashMap::from([
-                        ((0, "p"), (1, &parse_term("pam*").unwrap())),
-                        ((0, "q"), (1, &parse_term("bob*").unwrap()))
+                        ((0, "p"), (1, &"pam*".parse().unwrap())),
+                        ((0, "q"), (1, &"bob*".parse().unwrap()))
                     ])
                 )
             ]
@@ -1181,8 +1182,8 @@ mod tests {
             [(
                 1 + 2,
                 HashMap::from([
-                    ((0, "y"), (1, &parse_term("pat*").unwrap())),
-                    ((0, "x"), (2, &parse_term("bob*").unwrap()))
+                    ((0, "y"), (1, &"pat*".parse().unwrap())),
+                    ((0, "x"), (2, &"bob*".parse().unwrap()))
                 ])
             )]
         )
@@ -1198,15 +1199,15 @@ mod tests {
                 (
                     5 + 2,
                     HashMap::from([
-                        ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "y"), (2, &parse_term("pat*").unwrap()))
+                        ((0, "x"), (1, &"bob*".parse().unwrap())),
+                        ((0, "y"), (2, &"pat*".parse().unwrap()))
                     ])
                 ),
                 (
                     5 + 3,
                     HashMap::from([
-                        ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "y"), (2, &parse_term("ann*").unwrap()))
+                        ((0, "x"), (1, &"bob*".parse().unwrap())),
+                        ((0, "y"), (2, &"ann*".parse().unwrap()))
                     ])
                 )
             ]
@@ -1221,7 +1222,7 @@ mod tests {
             infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
             [(
                 3 + 2,
-                HashMap::from([((0, "x"), (1, &parse_term("bob*").unwrap()))])
+                HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
             )]
         )
     }
@@ -1235,8 +1236,8 @@ mod tests {
             [(
                 6 + 2 + 1,
                 HashMap::from([
-                    ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                    ((0, "y"), (2, &parse_term("pat*").unwrap()))
+                    ((0, "x"), (1, &"bob*".parse().unwrap())),
+                    ((0, "y"), (2, &"pat*".parse().unwrap()))
                 ])
             )]
         )
@@ -1272,18 +1273,9 @@ mod tests {
         assert_eq!(
             infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
             [
-                (
-                    3,
-                    HashMap::from([((0, "x"), (1, &parse_term("p*").unwrap())),])
-                ),
-                (
-                    5,
-                    HashMap::from([((0, "x"), (1, &parse_term("p*").unwrap())),])
-                ),
-                (
-                    6,
-                    HashMap::from([((0, "x"), (1, &parse_term("q*").unwrap())),])
-                )
+                (3, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
+                (5, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
+                (6, HashMap::from([((0, "x"), (1, &"q*".parse().unwrap())),]))
             ]
         )
     }
