@@ -205,23 +205,16 @@ impl Ord for State<'_> {
 
 struct Infer<'a> {
     rules: &'a [Rule],
-    stack: Vec<Reverse<State<'a>>>,
     pq: BinaryHeap<Reverse<State<'a>>>,
 }
 
 impl<'a> Infer<'a> {
     fn push_state(&mut self, state: State<'a>) {
-        if let Some(Reverse(s)) = self.pq.peek()
-            && *s == state
-        {
-            self.stack.push(Reverse(state))
-        } else {
-            self.pq.push(Reverse(state))
-        }
+        self.pq.push(Reverse(state))
     }
 
     fn pop_state(&mut self) -> Option<State<'a>> {
-        self.stack.pop().or_else(|| self.pq.pop()).map(|x| x.0)
+        self.pq.pop().map(|x| x.0)
     }
 
     fn push_goals(
@@ -302,7 +295,6 @@ impl<'a> Iterator for Infer<'a> {
 fn infer_iter<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
     Infer {
         rules: rules,
-        stack: vec![],
         pq: BinaryHeap::from([Reverse(State {
             cost: 0,
             namespace: 0,
@@ -784,72 +776,68 @@ mod tests {
     fn test_infer_1_5() {
         let rules = &parse_rules(RULES1).unwrap();
         let query = &parse_query("parent(bob*, y?).").unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            [
-                (
-                    0,
-                    HashMap::from([((0, "y"), (1, &parse_term("ann*").unwrap()))])
-                ),
-                (
-                    0,
-                    HashMap::from([((0, "y"), (1, &parse_term("pat*").unwrap()))])
-                )
-            ]
-        );
+        let res =
+            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        assert!(res.len() == 2);
+        assert!(res.contains(&(
+            0,
+            HashMap::from([((0, "y"), (1, &parse_term("ann*").unwrap()))])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([((0, "y"), (1, &parse_term("pat*").unwrap()))])
+        )));
     }
 
     #[test]
     fn test_infer_1_6() {
         let rules = &parse_rules(RULES1).unwrap();
         let query = &parse_query("parent(p?, q?).").unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            [
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("pam*").unwrap())),
-                        ((0, "q"), (1, &parse_term("bob*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                        ((0, "q"), (1, &parse_term("bob*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("tom*").unwrap())),
-                        ((0, "q"), (1, &parse_term("liz*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "q"), (1, &parse_term("ann*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "q"), (1, &parse_term("pat*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "p"), (1, &parse_term("pat*").unwrap())),
-                        ((0, "q"), (1, &parse_term("jim*").unwrap()))
-                    ])
-                )
-            ]
-        );
+        let res =
+            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        assert!(res.len() == 6);
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("pam*").unwrap())),
+                ((0, "q"), (1, &parse_term("bob*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("tom*").unwrap())),
+                ((0, "q"), (1, &parse_term("bob*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("tom*").unwrap())),
+                ((0, "q"), (1, &parse_term("liz*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("bob*").unwrap())),
+                ((0, "q"), (1, &parse_term("ann*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("bob*").unwrap())),
+                ((0, "q"), (1, &parse_term("pat*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "p"), (1, &parse_term("pat*").unwrap())),
+                ((0, "q"), (1, &parse_term("jim*").unwrap()))
+            ])
+        )));
     }
 
     #[test]
@@ -872,25 +860,23 @@ mod tests {
     fn test_infer_1_8() {
         let rules = &parse_rules(RULES1).unwrap();
         let query = &parse_query("parent(tom*, x?), parent(x?, y?).").unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            [
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "y"), (2, &parse_term("ann*").unwrap()))
-                    ])
-                ),
-                (
-                    0,
-                    HashMap::from([
-                        ((0, "x"), (1, &parse_term("bob*").unwrap())),
-                        ((0, "y"), (2, &parse_term("pat*").unwrap()))
-                    ])
-                )
-            ]
-        )
+        let res =
+            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        assert!(res.len() == 2);
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "x"), (1, &parse_term("bob*").unwrap())),
+                ((0, "y"), (2, &parse_term("ann*").unwrap()))
+            ])
+        )));
+        assert!(res.contains(&(
+            0,
+            HashMap::from([
+                ((0, "x"), (1, &parse_term("bob*").unwrap())),
+                ((0, "y"), (2, &parse_term("pat*").unwrap()))
+            ])
+        )));
     }
 
     #[test]
