@@ -173,47 +173,47 @@ fn unify<'a>(
 }
 
 #[derive(Clone)]
-struct State<'a> {
+struct State<'a, RulesIter: Clone> {
     cost: u64,
     namespace: u64,
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, Iter<'a, Term>)>,
-    rules_iter: Iter<'a, Rule>,
+    rules_iter: RulesIter,
 }
 
-impl Eq for State<'_> {}
+impl<RulesIter: Clone> Eq for State<'_, RulesIter> {}
 
-impl PartialEq for State<'_> {
+impl<RulesIter: Clone> PartialEq for State<'_, RulesIter> {
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost
     }
 }
 
-impl PartialOrd for State<'_> {
+impl<RulesIter: Clone> PartialOrd for State<'_, RulesIter> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for State<'_> {
+impl<RulesIter: Clone> Ord for State<'_, RulesIter> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cost.cmp(&other.cost)
     }
 }
 
-struct Infer<'a> {
-    rules: &'a [Rule],
-    pq: BinaryHeap<Reverse<State<'a>>>,
+struct Infer<'a, RulesIter: Clone> {
+    rules_iter: RulesIter,
+    pq: BinaryHeap<Reverse<State<'a, RulesIter>>>,
 }
 
-impl<'a> Infer<'a> {
-    fn push_state(&mut self, state: State<'a>) {
+impl<'a, RulesIter: Clone> Infer<'a, RulesIter> {
+    fn push_state(&mut self, state: State<'a, RulesIter>) {
         self.pq.push(Reverse(state))
     }
 
-    fn pop_state(&mut self) -> Option<State<'a>> {
+    fn pop_state(&mut self) -> Option<State<'a, RulesIter>> {
         self.pq.pop().map(|x| x.0)
     }
 
@@ -248,7 +248,7 @@ impl<'a> Infer<'a> {
     }
 }
 
-impl<'a> Iterator for Infer<'a> {
+impl<'a, RulesIter: Clone + Iterator<Item = &'a Rule>> Iterator for Infer<'a, RulesIter> {
     type Item = (u64, HashMap<(u64, &'a str), (u64, &'a Term)>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -266,7 +266,7 @@ impl<'a> Iterator for Infer<'a> {
                 };
                 state.table = table;
                 self.update_goals(&mut state.goals, &mut state.shared);
-                state.rules_iter = self.rules.iter();
+                state.rules_iter = self.rules_iter.clone();
                 state.shared_remaining = state.shared.clone();
                 self.push_state(state);
                 continue;
@@ -285,16 +285,24 @@ impl<'a> Iterator for Infer<'a> {
             state.table = table;
             self.push_goals(&mut state.goals, (state.namespace, head, body.iter()));
             self.update_goals(&mut state.goals, &mut state.shared);
-            state.rules_iter = self.rules.iter();
+            state.rules_iter = self.rules_iter.clone();
             state.shared_remaining = state.shared.clone();
             self.push_state(state);
         }
     }
 }
 
-fn infer_iter<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
+fn infer_iter<
+    'a,
+    RulesIter: Clone + Iterator<Item = &'a Rule>,
+    Rules: IntoIterator<IntoIter = RulesIter>,
+>(
+    goals: &'a [Term],
+    rules: Rules,
+) -> Infer<'a, RulesIter> {
+    let rules_iter = rules.into_iter();
     Infer {
-        rules: rules,
+        rules_iter: rules_iter.clone(),
         pq: BinaryHeap::from([Reverse(State {
             cost: 0,
             namespace: 0,
@@ -302,14 +310,18 @@ fn infer_iter<'a>(goals: &'a [Term], rules: &'a [Rule]) -> Infer<'a> {
             shared: Vec::new(),
             shared_remaining: Vec::new(),
             goals: vec![(0, &goals[0], goals.iter())],
-            rules_iter: rules.iter(),
+            rules_iter: rules_iter.clone(),
         })]),
     }
 }
 
-pub fn infer<'a>(
+pub fn infer<
+    'a,
+    RulesIter: Clone + Iterator<Item = &'a Rule>,
+    Rules: IntoIterator<IntoIter = RulesIter>,
+>(
     goals: &'a [Term],
-    rules: &'a [Rule],
+    rules: Rules,
 ) -> Option<(u64, HashMap<(u64, &'a str), (u64, &'a Term)>)> {
     infer_iter(goals, rules).next()
 }
