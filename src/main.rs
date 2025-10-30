@@ -19,7 +19,7 @@ fn main() {
         eprintln!("Cannot read file: {}", &args[1]);
         process::exit(1);
     };
-    let Some(rules) = cosp::parse_rules(&contents) else {
+    let Ok(rules) = &contents.parse() else {
         eprintln!("Cannot parse rules file: {}", &args[1]);
         process::exit(1);
     };
