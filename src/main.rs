@@ -28,7 +28,7 @@ fn main() {
         print!("?- ");
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_line(&mut input).unwrap();
-        let Some(query) = cosp::parse_query(input.trim_end()) else {
+        let Ok(query) = input.trim_end().parse() else {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
         };
