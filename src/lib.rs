@@ -60,6 +60,40 @@ pub enum Rule {
     Rule(u64, Term, Terms),
 }
 
+#[derive(Clone)]
+pub struct RulesIter<'a> {
+    iter: Iter<'a, Rule>,
+}
+
+impl<'a> Iterator for RulesIter<'a> {
+    type Item = &'a Rule;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Rules {
+    vec: Vec<Rule>,
+}
+
+impl From<Vec<Rule>> for Rules {
+    fn from(vec: Vec<Rule>) -> Self {
+        Rules { vec }
+    }
+}
+
+impl Rules {
+    fn iter(&self) -> RulesIter<'_> {
+        RulesIter {
+            iter: self.vec.iter(),
+        }
+    }
+    fn insert(&mut self, index: usize, element: Rule) {
+        self.vec.insert(index, element)
+    }
+}
+
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
         (ns, Term::Compound(label, args)) => {
@@ -137,7 +171,7 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     }
 }
 
-fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Rule>> {
+fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rules> {
     match iter.next() {
         Some("[") => {
             let rule = take_rule(iter)?;
@@ -145,7 +179,7 @@ fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Rule>>
             rules.insert(0, rule);
             Some(rules)
         }
-        None => Some(vec![]),
+        None => Some(vec![].into()),
         _ => None,
     }
 }
@@ -170,7 +204,7 @@ impl FromStr for Terms {
     }
 }
 
-pub fn parse_rules(input: &str) -> Option<Vec<Rule>> {
+pub fn parse_rules(input: &str) -> Option<Rules> {
     let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", ".", ":-", "[", "]"]);
     let mut iter = tokenizer.tokenize(input).map_while(|x| x.ok());
     let rules = take_rules(&mut iter)?;
@@ -223,47 +257,47 @@ fn unify<'a>(
 }
 
 #[derive(Clone)]
-struct State<'a, RulesIter: Clone> {
+struct State<'a> {
     cost: u64,
     namespace: u64,
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
-    rules_iter: RulesIter,
+    rules_iter: RulesIter<'a>,
 }
 
-impl<RulesIter: Clone> Eq for State<'_, RulesIter> {}
+impl Eq for State<'_> {}
 
-impl<RulesIter: Clone> PartialEq for State<'_, RulesIter> {
+impl PartialEq for State<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost
     }
 }
 
-impl<RulesIter: Clone> PartialOrd for State<'_, RulesIter> {
+impl PartialOrd for State<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<RulesIter: Clone> Ord for State<'_, RulesIter> {
+impl Ord for State<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cost.cmp(&other.cost)
     }
 }
 
-struct Infer<'a, RulesIter: Clone> {
-    rules_iter: RulesIter,
-    pq: BinaryHeap<Reverse<State<'a, RulesIter>>>,
+struct Infer<'a> {
+    rules_iter: RulesIter<'a>,
+    pq: BinaryHeap<Reverse<State<'a>>>,
 }
 
-impl<'a, RulesIter: Clone> Infer<'a, RulesIter> {
-    fn push_state(&mut self, state: State<'a, RulesIter>) {
+impl<'a> Infer<'a> {
+    fn push_state(&mut self, state: State<'a>) {
         self.pq.push(Reverse(state))
     }
 
-    fn pop_state(&mut self) -> Option<State<'a, RulesIter>> {
+    fn pop_state(&mut self) -> Option<State<'a>> {
         self.pq.pop().map(|x| x.0)
     }
 
@@ -298,7 +332,7 @@ impl<'a, RulesIter: Clone> Infer<'a, RulesIter> {
     }
 }
 
-impl<'a, RulesIter: Clone + Iterator<Item = &'a Rule>> Iterator for Infer<'a, RulesIter> {
+impl<'a> Iterator for Infer<'a> {
     type Item = (u64, HashMap<(u64, &'a str), (u64, &'a Term)>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -342,16 +376,9 @@ impl<'a, RulesIter: Clone + Iterator<Item = &'a Rule>> Iterator for Infer<'a, Ru
     }
 }
 
-fn infer_iter<
-    'a,
-    RulesIter: Clone + Iterator<Item = &'a Rule>,
-    Rules: IntoIterator<IntoIter = RulesIter>,
->(
-    goals: &'a Terms,
-    rules: Rules,
-) -> Infer<'a, RulesIter> {
+fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let goals_iter = goals.iter();
-    let rules_iter = rules.into_iter();
+    let rules_iter = rules.iter();
     Infer {
         rules_iter: rules_iter.clone(),
         pq: BinaryHeap::from([Reverse(State {
@@ -366,13 +393,9 @@ fn infer_iter<
     }
 }
 
-pub fn infer<
-    'a,
-    RulesIter: Clone + Iterator<Item = &'a Rule>,
-    Rules: IntoIterator<IntoIter = RulesIter>,
->(
+pub fn infer<'a>(
     goals: &'a Terms,
-    rules: Rules,
+    rules: &'a Rules,
 ) -> Option<(u64, HashMap<(u64, &'a str), (u64, &'a Term)>)> {
     infer_iter(goals, rules).next()
 }
@@ -598,18 +621,21 @@ mod tests {
         let rules = parse_rules("[2]a* :- b*, c?.   \n[4]d*.\n");
         assert_eq!(
             rules,
-            Some(vec![
-                Rule::Rule(
-                    2,
-                    Term::Constant(String::from("a")),
-                    vec![
-                        Term::Constant(String::from("b")),
-                        Term::Variable(String::from("c"))
-                    ]
-                    .into()
-                ),
-                Rule::Rule(4, Term::Constant(String::from("d")), vec![].into())
-            ])
+            Some(
+                vec![
+                    Rule::Rule(
+                        2,
+                        Term::Constant(String::from("a")),
+                        vec![
+                            Term::Constant(String::from("b")),
+                            Term::Variable(String::from("c"))
+                        ]
+                        .into()
+                    ),
+                    Rule::Rule(4, Term::Constant(String::from("d")), vec![].into())
+                ]
+                .into()
+            )
         );
     }
 
