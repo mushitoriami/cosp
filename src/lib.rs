@@ -12,6 +12,24 @@ pub enum Term {
     Compound(String, Terms),
 }
 
+#[derive(Clone)]
+pub struct TermsIter<'a> {
+    iter: Iter<'a, Term>,
+}
+
+impl<'a> Iterator for TermsIter<'a> {
+    type Item = &'a Term;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl ExactSizeIterator for TermsIter<'_> {
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Terms {
     vec: Vec<Term>,
@@ -24,8 +42,10 @@ impl From<Vec<Term>> for Terms {
 }
 
 impl Terms {
-    fn iter(&self) -> Iter<'_, Term> {
-        self.vec.iter()
+    fn iter(&self) -> TermsIter<'_> {
+        TermsIter {
+            iter: self.vec.iter(),
+        }
     }
     fn len(&self) -> usize {
         self.vec.len()
@@ -209,7 +229,7 @@ struct State<'a, RulesIter: Clone> {
     table: HashMap<(u64, &'a str), (u64, &'a Term)>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
-    goals: Vec<(u64, &'a Term, Iter<'a, Term>)>,
+    goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
     rules_iter: RulesIter,
 }
 
@@ -249,24 +269,24 @@ impl<'a, RulesIter: Clone> Infer<'a, RulesIter> {
 
     fn push_goals(
         &mut self,
-        goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>,
-        goals_iter: (u64, &'a Term, Iter<'a, Term>),
+        goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>,
+        goals_iter: (u64, &'a Term, TermsIter<'a>),
     ) {
         goals.push(goals_iter)
     }
 
-    fn pop_goal(&mut self, goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>) -> (u64, &'a Term) {
+    fn pop_goal(&mut self, goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>) -> (u64, &'a Term) {
         let (namespace, _, iter) = goals.last_mut().unwrap();
         (*namespace, iter.next().unwrap())
     }
 
-    fn is_empty_goal(&mut self, goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>) -> bool {
+    fn is_empty_goal(&mut self, goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>) -> bool {
         goals.is_empty()
     }
 
     fn update_goals(
         &mut self,
-        goals: &mut Vec<(u64, &'a Term, Iter<'a, Term>)>,
+        goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>,
         shared: &mut Vec<(u64, &'a Term)>,
     ) {
         while let Some((namespace, head, goals_iter)) = goals.last_mut()
