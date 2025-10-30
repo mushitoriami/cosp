@@ -9,24 +9,42 @@ use std::str::FromStr;
 pub enum Term {
     Constant(String),
     Variable(String),
-    Compound(String, Vec<Term>),
+    Compound(String, Terms),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Terms {
-    Terms(Vec<Term>),
+pub struct Terms {
+    vec: Vec<Term>,
+}
+
+impl From<Vec<Term>> for Terms {
+    fn from(vec: Vec<Term>) -> Self {
+        Terms { vec }
+    }
+}
+
+impl Terms {
+    fn iter(&self) -> Iter<'_, Term> {
+        self.vec.iter()
+    }
+    fn len(&self) -> usize {
+        self.vec.len()
+    }
+    fn insert(&mut self, index: usize, element: Term) {
+        self.vec.insert(index, element)
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Rule {
-    Rule(u64, Term, Vec<Term>),
+    Rule(u64, Term, Terms),
 }
 
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
         (ns, Term::Compound(label, args)) => {
             let goals_string: Vec<String> = args
-                .into_iter()
+                .iter()
                 .map(|x| stringify_goal((ns, x), table))
                 .collect();
             label.clone() + "(" + &goals_string.join(", ") + ")"
@@ -49,7 +67,7 @@ pub fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String
     res
 }
 
-fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
         "," => {
@@ -57,7 +75,7 @@ fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Te
             args.insert(0, term);
             Some(args)
         }
-        ")" => Some(vec![term]),
+        ")" => Some(vec![term].into()),
         _ => None,
     }
 }
@@ -75,7 +93,7 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
     }
 }
 
-fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>> {
+fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
         "," => {
@@ -83,7 +101,7 @@ fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Vec<Term>>
             args.insert(0, term);
             Some(args)
         }
-        "." => Some(vec![term]),
+        "." => Some(vec![term].into()),
         _ => None,
     }
 }
@@ -93,8 +111,8 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     let _ = (iter.next()? == "]").then_some(())?;
     let head = take_term(iter)?;
     match iter.next()? {
-        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?)),
-        "." => Some(Rule::Rule(cost, head, Vec::new())),
+        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?.into())),
+        "." => Some(Rule::Rule(cost, head, Vec::new().into())),
         _ => None,
     }
 }
@@ -127,7 +145,7 @@ impl FromStr for Terms {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
         let mut iter = tokenizer.tokenize(s).map_while(|x| x.ok());
-        let query = Terms::Terms(take_terms(&mut iter).ok_or(())?);
+        let query = take_terms(&mut iter).ok_or(())?;
         iter.next().is_none().then_some(query).ok_or(())
     }
 }
@@ -312,7 +330,7 @@ fn infer_iter<
     goals: &'a Terms,
     rules: Rules,
 ) -> Infer<'a, RulesIter> {
-    let Terms::Terms(goals) = goals;
+    let goals_iter = goals.iter();
     let rules_iter = rules.into_iter();
     Infer {
         rules_iter: rules_iter.clone(),
@@ -322,7 +340,7 @@ fn infer_iter<
             table: HashMap::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
-            goals: vec![(0, &goals[0], goals.iter())],
+            goals: vec![(0, goals_iter.clone().next().unwrap(), goals_iter.clone())],
             rules_iter: rules_iter.clone(),
         })]),
     }
@@ -410,10 +428,11 @@ mod tests {
                 vec![
                     Term::Compound(
                         String::from("c_d"),
-                        vec![Term::Constant(String::from("e_f"))],
+                        vec![Term::Constant(String::from("e_f"))].into(),
                     ),
                     Term::Variable(String::from("g_h")),
-                ],
+                ]
+                .into(),
             ))
         );
     }
@@ -478,7 +497,8 @@ mod tests {
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
-                ],
+                ]
+                .into(),
             ))
         );
     }
@@ -505,26 +525,28 @@ mod tests {
 
     #[test]
     fn test_parse_query_1() {
-        let query = "f(a*, b*, x?).".parse();
+        let query = "f(a*, b*, x?).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok(Terms::Terms(vec![Term::Compound(
+            Ok(vec![Term::Compound(
                 String::from("f"),
                 vec![
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
                 ]
-            )]))
+                .into()
+            )]
+            .into())
         );
     }
 
     #[test]
     fn test_parse_query_2() {
-        let query = "f(a*, b*, x?), g(c*, y?), h(d*).".parse();
+        let query = "f(a*, b*, x?), g(c*, y?), h(d*).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok(Terms::Terms(vec![
+            Ok(vec![
                 Term::Compound(
                     String::from("f"),
                     vec![
@@ -532,6 +554,7 @@ mod tests {
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("x")),
                     ]
+                    .into()
                 ),
                 Term::Compound(
                     String::from("g"),
@@ -539,9 +562,14 @@ mod tests {
                         Term::Constant(String::from("c")),
                         Term::Variable(String::from("y")),
                     ]
+                    .into()
                 ),
-                Term::Compound(String::from("h"), vec![Term::Constant(String::from("d"))])
-            ]))
+                Term::Compound(
+                    String::from("h"),
+                    vec![Term::Constant(String::from("d"))].into()
+                )
+            ]
+            .into())
         );
     }
 
@@ -558,8 +586,9 @@ mod tests {
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("c"))
                     ]
+                    .into()
                 ),
-                Rule::Rule(4, Term::Constant(String::from("d")), vec![])
+                Rule::Rule(4, Term::Constant(String::from("d")), vec![].into())
             ])
         );
     }
