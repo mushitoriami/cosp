@@ -230,7 +230,9 @@ fn occurs_check(
     r: &HashMap<(u64, &str), (u64, &Term)>,
 ) -> bool {
     match t {
-        Term::Compound(_, args) => args.into_iter().all(|c| occurs_check((nsv, s), (nst, c), r)),
+        Term::Compound(_, args) => args
+            .into_iter()
+            .all(|c| occurs_check((nsv, s), (nst, c), r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
         Term::Variable(s1) => r
             .get(&(nst, s1))
