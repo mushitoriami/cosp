@@ -41,12 +41,17 @@ impl From<Vec<Term>> for Terms {
     }
 }
 
-impl Terms {
-    fn iter(&self) -> TermsIter<'_> {
+impl<'a> IntoIterator for &'a Terms {
+    type Item = &'a Term;
+    type IntoIter = TermsIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
         TermsIter {
             iter: self.vec.iter(),
         }
     }
+}
+
+impl Terms {
     fn len(&self) -> usize {
         self.vec.len()
     }
@@ -83,12 +88,17 @@ impl From<Vec<Rule>> for Rules {
     }
 }
 
-impl Rules {
-    fn iter(&self) -> RulesIter<'_> {
+impl<'a> IntoIterator for &'a Rules {
+    type Item = &'a Rule;
+    type IntoIter = RulesIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
         RulesIter {
             iter: self.vec.iter(),
         }
     }
+}
+
+impl Rules {
     fn insert(&mut self, index: usize, element: Rule) {
         self.vec.insert(index, element)
     }
@@ -98,7 +108,7 @@ fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>
     match goal {
         (ns, Term::Compound(label, args)) => {
             let goals_string: Vec<String> = args
-                .iter()
+                .into_iter()
                 .map(|x| stringify_goal((ns, x), table))
                 .collect();
             label.clone() + "(" + &goals_string.join(", ") + ")"
@@ -220,7 +230,7 @@ fn occurs_check(
     r: &HashMap<(u64, &str), (u64, &Term)>,
 ) -> bool {
     match t {
-        Term::Compound(_, args) => args.iter().all(|c| occurs_check((nsv, s), (nst, c), r)),
+        Term::Compound(_, args) => args.into_iter().all(|c| occurs_check((nsv, s), (nst, c), r)),
         Term::Variable(s1) if nsv == nst && s == s1 => false,
         Term::Variable(s1) => r
             .get(&(nst, s1))
@@ -238,7 +248,7 @@ fn unify<'a>(
         ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
         {
-            let mut iter = args1.iter().zip(args2.iter());
+            let mut iter = args1.into_iter().zip(args2.into_iter());
             iter.try_fold(r, |r, (c1, c2)| unify((ns1, c1), (ns2, c2), r))
         }
         ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => Some(r),
@@ -370,7 +380,7 @@ impl<'a> Iterator for Infer<'a> {
                 continue;
             };
             state.table = table;
-            self.push_goals(&mut state.goals, (state.namespace, head, body.iter()));
+            self.push_goals(&mut state.goals, (state.namespace, head, body.into_iter()));
             self.update_goals(&mut state.goals, &mut state.shared);
             state.rules_iter = self.rules_iter.clone();
             state.shared_remaining = state.shared.clone();
@@ -380,8 +390,8 @@ impl<'a> Iterator for Infer<'a> {
 }
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
-    let goals_iter = goals.iter();
-    let rules_iter = rules.iter();
+    let goals_iter = goals.into_iter();
+    let rules_iter = rules.into_iter();
     Infer {
         rules_iter: rules_iter.clone(),
         pq: BinaryHeap::from([Reverse(State {
