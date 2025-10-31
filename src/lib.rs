@@ -37,8 +37,8 @@ pub struct Terms {
     vec: Vec<Term>,
 }
 
-impl<const N: usize> From<[Term; N]> for Terms {
-    fn from(vec: [Term; N]) -> Self {
+impl<T: Into<Vec<Term>>> From<T> for Terms {
+    fn from(vec: T) -> Self {
         Terms { vec: vec.into() }
     }
 }
@@ -90,8 +90,8 @@ pub struct Rules {
     vec: Vec<Rule>,
 }
 
-impl<const N: usize> From<[Rule; N]> for Rules {
-    fn from(vec: [Rule; N]) -> Self {
+impl<T: Into<Vec<Rule>>> From<T> for Rules {
+    fn from(vec: T) -> Self {
         Rules { vec: vec.into() }
     }
 }
