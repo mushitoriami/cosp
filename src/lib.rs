@@ -92,7 +92,7 @@ pub struct Rules {
 
 impl<const N: usize> From<[Rule; N]> for Rules {
     fn from(vec: [Rule; N]) -> Self {
-        Rules{ vec: vec.into() }
+        Rules { vec: vec.into() }
     }
 }
 
