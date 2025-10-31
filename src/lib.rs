@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::slice::Iter;
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Term {
     Constant(String),
     Variable(String),
@@ -30,7 +31,8 @@ impl ExactSizeIterator for TermsIter<'_> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Terms {
     vec: Vec<Term>,
 }
@@ -60,7 +62,8 @@ impl Terms {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Rule {
     Rule(u64, Term, Terms),
 }
@@ -77,7 +80,8 @@ impl<'a> Iterator for RulesIter<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Rules {
     vec: Vec<Rule>,
 }
