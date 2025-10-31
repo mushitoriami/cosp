@@ -54,11 +54,15 @@ impl<'a> IntoIterator for &'a Terms {
 }
 
 impl Terms {
+    fn new() -> Self {
+        return Terms { vec: Vec::new() };
+    }
+    fn head_and_tail(head: Term, mut tail: Self) -> Self {
+        tail.vec.insert(0, head);
+        return tail;
+    }
     fn len(&self) -> usize {
         self.vec.len()
-    }
-    fn insert(&mut self, index: usize, element: Term) {
-        self.vec.insert(index, element)
     }
 }
 
@@ -103,8 +107,12 @@ impl<'a> IntoIterator for &'a Rules {
 }
 
 impl Rules {
-    fn insert(&mut self, index: usize, element: Rule) {
-        self.vec.insert(index, element)
+    fn new() -> Self {
+        return Rules { vec: Vec::new() };
+    }
+    fn head_and_tail(head: Rule, mut tail: Self) -> Self {
+        tail.vec.insert(0, head);
+        return tail;
     }
 }
 
@@ -138,12 +146,8 @@ pub fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
-        "," => {
-            let mut args = take_term_args(iter)?;
-            args.insert(0, term);
-            Some(args)
-        }
-        ")" => Some(vec![term].into()),
+        "," => Some(Terms::head_and_tail(term, take_term_args(iter)?)),
+        ")" => Some(Terms::head_and_tail(term, Terms::new())),
         _ => None,
     }
 }
@@ -153,10 +157,7 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
     match iter.next()? {
         "*" => Some(Term::Constant(String::from(label))),
         "?" => Some(Term::Variable(String::from(label))),
-        "(" => {
-            let args = take_term_args(iter)?;
-            Some(Term::Compound(String::from(label), args))
-        }
+        "(" => Some(Term::Compound(String::from(label), take_term_args(iter)?)),
         _ => None,
     }
 }
@@ -164,12 +165,8 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
 fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
-        "," => {
-            let mut args = take_terms(iter)?;
-            args.insert(0, term);
-            Some(args)
-        }
-        "." => Some(vec![term].into()),
+        "," => Some(Terms::head_and_tail(term, take_terms(iter)?)),
+        "." => Some(Terms::head_and_tail(term, Terms::new())),
         _ => None,
     }
 }
@@ -187,13 +184,8 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
 
 fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rules> {
     match iter.next() {
-        Some("[") => {
-            let rule = take_rule(iter)?;
-            let mut rules = take_rules(iter)?;
-            rules.insert(0, rule);
-            Some(rules)
-        }
-        None => Some(vec![].into()),
+        Some("[") => Some(Rules::head_and_tail(take_rule(iter)?, take_rules(iter)?)),
+        None => Some(Rules::new()),
         _ => None,
     }
 }
