@@ -37,9 +37,9 @@ pub struct Terms {
     vec: Vec<Term>,
 }
 
-impl From<Vec<Term>> for Terms {
-    fn from(vec: Vec<Term>) -> Self {
-        Terms { vec }
+impl<T: Into<Vec<Term>>> From<T> for Terms {
+    fn from(vec: T) -> Self {
+        Terms { vec: vec.into() }
     }
 }
 
@@ -90,9 +90,9 @@ pub struct Rules {
     vec: Vec<Rule>,
 }
 
-impl From<Vec<Rule>> for Rules {
-    fn from(vec: Vec<Rule>) -> Self {
-        Rules { vec }
+impl<T: Into<Vec<Rule>>> From<T> for Rules {
+    fn from(vec: T) -> Self {
+        Rules { vec: vec.into() }
     }
 }
 
@@ -176,8 +176,8 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     let _ = (iter.next()? == "]").then_some(())?;
     let head = take_term(iter)?;
     match iter.next()? {
-        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?.into())),
-        "." => Some(Rule::Rule(cost, head, Vec::new().into())),
+        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?)),
+        "." => Some(Rule::Rule(cost, head, Terms::new())),
         _ => None,
     }
 }
@@ -479,10 +479,10 @@ mod tests {
             "ab(c_d(e_f*),g_h?)".parse(),
             Ok(Term::Compound(
                 String::from("ab"),
-                vec![
+                [
                     Term::Compound(
                         String::from("c_d"),
-                        vec![Term::Constant(String::from("e_f"))].into(),
+                        [Term::Constant(String::from("e_f"))].into(),
                     ),
                     Term::Variable(String::from("g_h")),
                 ]
@@ -547,7 +547,7 @@ mod tests {
             "f(a*, b*, x?)".parse(),
             Ok(Term::Compound(
                 String::from("f"),
-                vec![
+                [
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
@@ -582,9 +582,9 @@ mod tests {
         let query = "f(a*, b*, x?).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok(vec![Term::Compound(
+            Ok([Term::Compound(
                 String::from("f"),
-                vec![
+                [
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
@@ -600,10 +600,10 @@ mod tests {
         let query = "f(a*, b*, x?), g(c*, y?), h(d*).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok(vec![
+            Ok([
                 Term::Compound(
                     String::from("f"),
-                    vec![
+                    [
                         Term::Constant(String::from("a")),
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("x")),
@@ -612,7 +612,7 @@ mod tests {
                 ),
                 Term::Compound(
                     String::from("g"),
-                    vec![
+                    [
                         Term::Constant(String::from("c")),
                         Term::Variable(String::from("y")),
                     ]
@@ -620,7 +620,7 @@ mod tests {
                 ),
                 Term::Compound(
                     String::from("h"),
-                    vec![Term::Constant(String::from("d"))].into()
+                    [Term::Constant(String::from("d"))].into()
                 )
             ]
             .into())
@@ -632,17 +632,17 @@ mod tests {
         let rules = "[2]a* :- b*, c?.   \n[4]d*.\n".parse::<Rules>();
         assert_eq!(
             rules,
-            Ok(vec![
+            Ok([
                 Rule::Rule(
                     2,
                     Term::Constant(String::from("a")),
-                    vec![
+                    [
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("c"))
                     ]
                     .into()
                 ),
-                Rule::Rule(4, Term::Constant(String::from("d")), vec![].into())
+                Rule::Rule(4, Term::Constant(String::from("d")), Terms::new())
             ]
             .into())
         );
