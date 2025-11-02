@@ -13,23 +13,7 @@ pub enum Term {
     Compound(String, Terms),
 }
 
-#[derive(Clone)]
-pub struct TermsIter<'a> {
-    iter: Iter<'a, Term>,
-}
-
-impl<'a> Iterator for TermsIter<'a> {
-    type Item = &'a Term;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-}
-
-impl ExactSizeIterator for TermsIter<'_> {
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
+type TermsIter<'a> = Iter<'a, Term>;
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -47,9 +31,7 @@ impl<'a> IntoIterator for &'a Terms {
     type Item = &'a Term;
     type IntoIter = TermsIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        TermsIter {
-            iter: self.vec.iter(),
-        }
+        self.vec.iter()
     }
 }
 
@@ -72,17 +54,7 @@ pub enum Rule {
     Rule(u64, Term, Terms),
 }
 
-#[derive(Clone)]
-pub struct RulesIter<'a> {
-    iter: Iter<'a, Rule>,
-}
-
-impl<'a> Iterator for RulesIter<'a> {
-    type Item = &'a Rule;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-}
+type RulesIter<'a> = Iter<'a, Rule>;
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -100,9 +72,7 @@ impl<'a> IntoIterator for &'a Rules {
     type Item = &'a Rule;
     type IntoIter = RulesIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        RulesIter {
-            iter: self.vec.iter(),
-        }
+        self.vec.iter()
     }
 }
 
