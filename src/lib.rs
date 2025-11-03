@@ -190,11 +190,9 @@ impl FromStr for Rules {
     }
 }
 
-fn occurs_check(
-    (nsv, s): (u64, &str),
-    (nst, t): (u64, &Term),
-    r: &HashMap<(u64, &str), (u64, &Term)>,
-) -> bool {
+type Table<'a> = HashMap<(u64, &'a str), (u64, &'a Term)>;
+
+fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
     match t {
         Term::Constant(_) => true,
         Term::Variable(s1) => match r.get(&(nst, s1)) {
@@ -210,8 +208,8 @@ fn occurs_check(
 fn unify<'a>(
     goal1: (u64, &'a Term),
     goal2: (u64, &'a Term),
-    mut r: HashMap<(u64, &'a str), (u64, &'a Term)>,
-) -> Option<HashMap<(u64, &'a str), (u64, &'a Term)>> {
+    mut r: Table<'a>,
+) -> Option<Table<'a>> {
     match (goal1, goal2) {
         ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
@@ -241,7 +239,7 @@ fn unify<'a>(
 struct State<'a> {
     cost: u64,
     namespace: u64,
-    table: HashMap<(u64, &'a str), (u64, &'a Term)>,
+    table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
@@ -314,7 +312,7 @@ impl<'a> Infer<'a> {
 }
 
 impl<'a> Iterator for Infer<'a> {
-    type Item = (u64, HashMap<(u64, &'a str), (u64, &'a Term)>);
+    type Item = (u64, Table<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -374,10 +372,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     }
 }
 
-pub fn infer<'a>(
-    goals: &'a Terms,
-    rules: &'a Rules,
-) -> Option<(u64, HashMap<(u64, &'a str), (u64, &'a Term)>)> {
+pub fn infer<'a>(goals: &'a Terms, rules: &'a Rules) -> Option<(u64, Table<'a>)> {
     infer_iter(goals, rules).next()
 }
 
