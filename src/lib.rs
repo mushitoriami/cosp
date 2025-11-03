@@ -190,22 +190,26 @@ impl FromStr for Rules {
     }
 }
 
+type Goal<'a> = (u64, &'a Term);
+
 type Table<'a> = HashMap<(u64, &'a str), (u64, &'a Term)>;
 
-fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
+fn variables(t: &Term) -> Vec<&str> {
     match t {
-        Term::Constant(_) => true,
-        Term::Variable(s1) => match r.get(&(nst, s1)) {
-            Some(&g) => occurs_check((nsv, s), g, r),
-            None => !(nsv == nst && s == s1),
-        },
-        Term::Compound(_, args) => args
-            .into_iter()
-            .all(|c| occurs_check((nsv, s), (nst, c), r)),
+        Term::Constant(_) => Vec::new(),
+        Term::Variable(s) => [s.as_str()].into(),
+        Term::Compound(_, args) => args.into_iter().flat_map(|x| variables(x)).collect(),
     }
 }
 
-fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
+fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
+    variables(t).into_iter().all(|s1| match r.get(&(nst, s1)) {
+        Some(&g) => occurs_check((nsv, s), g, r),
+        None => (nst, s1) != (nsv, s),
+    })
+}
+
+fn unify<'a>(goal1: Goal<'a>, goal2: Goal<'a>, r: &mut Table<'a>) -> bool {
     match (goal1, goal2) {
         ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
