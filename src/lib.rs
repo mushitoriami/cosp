@@ -805,7 +805,7 @@ mod tests {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(bob*, pat*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(0, HashMap::new())]
         );
     }
@@ -814,20 +814,14 @@ mod tests {
     fn test_infer_1_2() {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(liz*, pat*).".parse().unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            []
-        );
+        assert_eq!(infer_iter(query, rules).collect::<Vec<(u64, Table)>>(), []);
     }
 
     #[test]
     fn test_infer_1_3() {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(tom*, ben*).".parse().unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            []
-        );
+        assert_eq!(infer_iter(query, rules).collect::<Vec<(u64, Table)>>(), []);
     }
 
     #[test]
@@ -835,7 +829,7 @@ mod tests {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(x?, liz*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
@@ -847,8 +841,7 @@ mod tests {
     fn test_infer_1_5() {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(bob*, y?).".parse().unwrap();
-        let res =
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        let res = infer_iter(query, rules).collect::<Vec<(u64, Table)>>();
         assert!(res.len() == 2);
         assert!(res.contains(&(
             0,
@@ -864,8 +857,7 @@ mod tests {
     fn test_infer_1_6() {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(p?, q?).".parse().unwrap();
-        let res =
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        let res = infer_iter(query, rules).collect::<Vec<(u64, Table)>>();
         assert!(res.len() == 6);
         assert!(res.contains(&(
             0,
@@ -916,7 +908,7 @@ mod tests {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(y?, jim*), parent(x?, y?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -931,8 +923,7 @@ mod tests {
     fn test_infer_1_8() {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(tom*, x?), parent(x?, y?).".parse().unwrap();
-        let res =
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>();
+        let res = infer_iter(query, rules).collect::<Vec<(u64, Table)>>();
         assert!(res.len() == 2);
         assert!(res.contains(&(
             0,
@@ -955,7 +946,7 @@ mod tests {
         let rules = &RULES1.parse().unwrap();
         let query = &"parent(x?, ann*), parent(x?, pat*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
@@ -970,7 +961,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -997,7 +988,7 @@ mod tests {
         let rules = &RULES2.parse().unwrap();
         let query = &"dark(x?), big(x?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -1035,7 +1026,7 @@ mod tests {
         let rules = &RULES3.parse().unwrap();
         let query = &"predecessor(tom*, pat*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -1054,7 +1045,7 @@ mod tests {
         let rules = &RULES3.parse().unwrap();
         let query = &"parent(pam*, bob*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(0, HashMap::from([]))]
         )
     }
@@ -1064,7 +1055,7 @@ mod tests {
         let rules = &RULES3.parse().unwrap();
         let query = &"mother(pam*, bob*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -1080,7 +1071,7 @@ mod tests {
         let rules = &RULES3.parse().unwrap();
         let query = &"grandparent(pam*, ann*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -1097,7 +1088,7 @@ mod tests {
         let rules = &RULES3.parse().unwrap();
         let query = &"grandparent(bob*, jim*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 0,
                 HashMap::from([
@@ -1123,7 +1114,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(bob*, pat*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(2, HashMap::new())]
         );
     }
@@ -1132,20 +1123,14 @@ mod tests {
     fn test_infer_4_2() {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(liz*, pat*).".parse().unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            []
-        );
+        assert_eq!(infer_iter(query, rules).collect::<Vec<(u64, Table)>>(), []);
     }
 
     #[test]
     fn test_infer_4_3() {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(tom*, ben*).".parse().unwrap();
-        assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
-            []
-        );
+        assert_eq!(infer_iter(query, rules).collect::<Vec<(u64, Table)>>(), []);
     }
 
     #[test]
@@ -1153,7 +1138,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(x?, liz*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 4,
                 HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
@@ -1166,7 +1151,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(bob*, y?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [
                 (
                     2,
@@ -1185,7 +1170,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(p?, q?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [
                 (
                     1,
@@ -1238,7 +1223,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(y?, jim*), parent(x?, y?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 1 + 2,
                 HashMap::from([
@@ -1254,7 +1239,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(tom*, x?), parent(x?, y?).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [
                 (
                     5 + 2,
@@ -1279,7 +1264,7 @@ mod tests {
         let rules = &RULES4.parse().unwrap();
         let query = &"parent(x?, ann*), parent(x?, pat*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 3 + 2,
                 HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
@@ -1294,7 +1279,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(
                 6 + 2 + 1,
                 HashMap::from([
@@ -1317,7 +1302,7 @@ mod tests {
         let rules = &RULES5.parse().unwrap();
         let query = &"p*.".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [(3, HashMap::from([])), (4, HashMap::from([]))]
         )
     }
@@ -1333,7 +1318,7 @@ mod tests {
         let rules = &RULES6.parse().unwrap();
         let query = &"f(x?), g(q*).".parse().unwrap();
         assert_eq!(
-            infer_iter(query, rules).collect::<Vec<(u64, HashMap<(u64, &str), (u64, &Term)>)>>(),
+            infer_iter(query, rules).collect::<Vec<(u64, Table)>>(),
             [
                 (3, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
                 (5, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
