@@ -619,19 +619,19 @@ mod tests {
     }
 
     #[test]
-    fn test_take_rules_2() {
+    fn test_parse_rules_2() {
         let rules = "[2]a:-b,C.\n".parse::<Rules>();
         assert_eq!(rules, Err(()));
     }
 
     #[test]
-    fn test_take_rules_3() {
+    fn test_parse_rules_3() {
         let rules = "[2]a:-b,C.  \n[4]d.\n".parse::<Rules>();
         assert_eq!(rules, Err(()));
     }
 
     #[test]
-    fn test_take_rules_4() {
+    fn test_parse_rules_4() {
         let rules = "[2]*a :- *b, ?c.   \n[4]*d.\n".parse::<Rules>();
         assert_eq!(rules, Err(()));
     }
