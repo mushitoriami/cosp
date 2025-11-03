@@ -205,20 +205,16 @@ fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> boo
     }
 }
 
-fn unify<'a>(
-    goal1: (u64, &'a Term),
-    goal2: (u64, &'a Term),
-    mut r: Table<'a>,
-) -> Option<Table<'a>> {
+fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
     match (goal1, goal2) {
         ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
         {
             let mut iter = args1.into_iter().zip(args2.into_iter());
-            iter.try_fold(r, |r, (c1, c2)| unify((ns1, c1), (ns2, c2), r))
+            iter.all(|(c1, c2)| unify((ns1, c1), (ns2, c2), r))
         }
-        ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => Some(r),
-        ((ns1, Term::Variable(s1)), (ns2, Term::Variable(s2))) if ns1 == ns2 && s1 == s2 => Some(r),
+        ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => true,
+        ((ns1, Term::Variable(s1)), (ns2, Term::Variable(s2))) if ns1 == ns2 && s1 == s2 => true,
         ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
             if r.contains_key(&(ns, s)) =>
         {
@@ -229,9 +225,9 @@ fn unify<'a>(
             if occurs_check((ns, s), goal, &r) =>
         {
             r.insert((ns, s), goal);
-            Some(r)
+            true
         }
-        _ => None,
+        _ => false,
     }
 }
 
@@ -323,11 +319,9 @@ impl<'a> Iterator for Infer<'a> {
             if let Some((namespace, term)) = state.shared_remaining.pop() {
                 self.push_state(state.clone());
                 let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
-                let Some(table) = unify((namespace, term), (namespace_goal, goal), state.table)
-                else {
+                if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
                     continue;
                 };
-                state.table = table;
                 self.update_goals(&mut state.goals, &mut state.shared);
                 state.rules_iter = self.rules_iter.clone();
                 state.shared_remaining = state.shared.clone();
@@ -341,11 +335,13 @@ impl<'a> Iterator for Infer<'a> {
             let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
-            let Some(table) = unify((state.namespace, head), (namespace_goal, goal), state.table)
-            else {
+            if !unify(
+                (state.namespace, head),
+                (namespace_goal, goal),
+                &mut state.table,
+            ) {
                 continue;
             };
-            state.table = table;
             self.push_goals(&mut state.goals, (state.namespace, head, body.into_iter()));
             self.update_goals(&mut state.goals, &mut state.shared);
             state.rules_iter = self.rules_iter.clone();
@@ -633,162 +629,123 @@ mod tests {
 
     #[test]
     fn test_unify_1() {
+        let term1 = "f(a* ,b* ,x? )".parse().unwrap();
+        let term2 = "f(y? ,b* ,c* )".parse().unwrap();
+        let term3 = "c*".parse().unwrap();
+        let term4 = "a*".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (1, &term2), &mut table));
         assert_eq!(
-            unify(
-                (0, &"f(a* ,b* ,x? )".parse().unwrap()),
-                (1, &"f(y? ,b* ,c* )".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([
-                ((0, "x"), (1, &"c*".parse().unwrap())),
-                ((1, "y"), (0, &"a*".parse().unwrap()))
-            ])
-        )
+            table,
+            [((0, "x"), (1, &term3)), ((1, "y"), (0, &term4))].into()
+        );
     }
 
     #[test]
     fn test_unify_2() {
+        let term1 = "f(x? ,y? )".parse().unwrap();
+        let term2 = "f(a* ,b* )".parse().unwrap();
+        let term3 = "a*".parse().unwrap();
+        let term4 = "b*".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((1, &term1), (1, &term2), &mut table));
         assert_eq!(
-            unify(
-                (1, &"f(x? ,y? )".parse().unwrap()),
-                (1, &"f(a* ,b* )".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([
-                ((1, "x"), (1, &"a*".parse().unwrap())),
-                ((1, "y"), (1, &"b*".parse().unwrap()))
-            ])
-        )
+            table,
+            [((1, "x"), (1, &term3)), ((1, "y"), (1, &term4))].into()
+        );
     }
 
     #[test]
     fn test_unify_3() {
-        assert_eq!(
-            unify(
-                (0, &"x?".parse().unwrap()),
-                (0, &"y?".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([((0, "x"), (0, &"y?".parse().unwrap()))])
-        )
+        let term1 = "x?".parse().unwrap();
+        let term2 = "y?".parse().unwrap();
+        let term3 = "y?".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (0, &term2), &mut table));
+        assert_eq!(table, [((0, "x"), (0, &term3))].into());
     }
 
     #[test]
     fn test_unify_4() {
-        assert_eq!(
-            unify(
-                (0, &"f(a*,b*)".parse().unwrap()),
-                (1, &"f(x?,x?)".parse().unwrap()),
-                HashMap::new()
-            ),
-            None
-        )
+        let term1 = "f(a*,b*)".parse().unwrap();
+        let term2 = "f(x?,x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(!unify((0, &term1), (1, &term2), &mut table));
     }
 
     #[test]
     fn test_unify_5() {
-        assert_eq!(
-            unify(
-                (0, &"x?".parse().unwrap()),
-                (0, &"f(x?)".parse().unwrap()),
-                HashMap::new()
-            ),
-            None
-        )
+        let term1 = "x?".parse().unwrap();
+        let term2 = "f(x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(!unify((0, &term1), (0, &term2), &mut table));
     }
 
     #[test]
     fn test_unify_6() {
-        assert_eq!(
-            unify(
-                (1, &"f(f(x?),g(y?))".parse().unwrap()),
-                (1, &"f(y?,x?)".parse().unwrap()),
-                HashMap::new()
-            ),
-            None
-        )
+        let term1 = "f(f(x?),g(y?))".parse().unwrap();
+        let term2 = "f(y?,x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(!unify((1, &term1), (1, &term2), &mut table));
     }
 
     #[test]
     fn test_unify_7() {
-        assert_eq!(
-            unify(
-                (1, &"g(x?,y?,x?)".parse().unwrap()),
-                (1, &"g(f(x?),f(y?),y?)".parse().unwrap()),
-                HashMap::new()
-            ),
-            None
-        )
+        let term1 = "g(x?,y?,x?)".parse().unwrap();
+        let term2 = "g(f(x?),f(y?),y?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(!unify((1, &term1), (1, &term2), &mut table));
     }
 
     #[test]
     fn test_unify_8() {
-        assert_eq!(
-            unify(
-                (0, &"x?".parse().unwrap()),
-                (0, &"x?".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::new()
-        )
+        let term1 = "x?".parse().unwrap();
+        let term2 = "x?".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (0, &term2), &mut table));
+        assert_eq!(table, HashMap::new());
     }
 
     #[test]
     fn test_unify_9() {
-        assert_eq!(
-            unify(
-                (0, &"x?".parse().unwrap()),
-                (1, &"f(x?)".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([((0, "x"), (1, &"f(x?)".parse().unwrap()))])
-        )
+        let term1 = "x?".parse().unwrap();
+        let term2 = "f(x?)".parse().unwrap();
+        let term3 = "f(x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert_eq!(table, [((0, "x"), (1, &term3))].into());
     }
 
     #[test]
     fn test_unify_10() {
-        assert_eq!(
-            unify(
-                (0, &"x?".parse().unwrap()),
-                (1, &"x?".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([((0, "x"), (1, &"x?".parse().unwrap()))])
-        )
+        let term1 = "x?".parse().unwrap();
+        let term2 = "x?".parse().unwrap();
+        let term3 = "x?".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert_eq!(table, [((0, "x"), (1, &term3))].into());
     }
 
     #[test]
     fn test_unify_11() {
+        let term1 = "f(f(x?),g(y?))".parse().unwrap();
+        let term2 = "f(y?,x?)".parse().unwrap();
+        let term3 = "g(y?)".parse().unwrap();
+        let term4 = "f(x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(unify((0, &term1), (1, &term2), &mut table));
         assert_eq!(
-            unify(
-                (0, &"f(f(x?),g(y?))".parse().unwrap()),
-                (1, &"f(y?,x?)".parse().unwrap()),
-                HashMap::new()
-            )
-            .unwrap(),
-            HashMap::from([
-                ((1, "x"), (0, &"g(y?)".parse().unwrap())),
-                ((1, "y"), (0, &"f(x?)".parse().unwrap()))
-            ])
-        )
+            table,
+            [((1, "x"), (0, &term3)), ((1, "y"), (0, &term4))].into()
+        );
     }
 
     #[test]
     fn test_unify_12() {
-        assert_eq!(
-            unify(
-                (0, &"f(f(x?), x?)".parse().unwrap()),
-                (1, &"f(x?,x?)".parse().unwrap()),
-                HashMap::new()
-            ),
-            None
-        )
+        let term1 = "f(f(x?), x?)".parse().unwrap();
+        let term2 = "f(x?,x?)".parse().unwrap();
+        let mut table = HashMap::new();
+        assert!(!unify((0, &term1), (1, &term2), &mut table));
     }
 
     const RULES1: &str = r#"
