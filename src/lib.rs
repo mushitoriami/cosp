@@ -190,8 +190,6 @@ impl FromStr for Rules {
     }
 }
 
-type Goal<'a> = (u64, &'a Term);
-
 type Table<'a> = HashMap<(u64, &'a str), (u64, &'a Term)>;
 
 fn variables(t: &Term) -> Vec<&str> {
@@ -209,7 +207,7 @@ fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> boo
     })
 }
 
-fn unify<'a>(goal1: Goal<'a>, goal2: Goal<'a>, r: &mut Table<'a>) -> bool {
+fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
     match (goal1, goal2) {
         ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
             if s1 == s2 && args1.len() == args2.len() =>
