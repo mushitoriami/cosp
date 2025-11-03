@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::iter::empty;
+use std::iter::once;
 use std::slice::Iter;
 use std::str::FromStr;
 
@@ -190,19 +192,35 @@ impl FromStr for Rules {
     }
 }
 
+impl Term {
+    fn variables(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match self {
+            Term::Constant(_) => Box::new(empty()),
+            Term::Variable(s) => Box::new(once(s.as_str())),
+            Term::Compound(_, args) => Box::new(args.into_iter().map(|t| t.variables()).flatten()),
+        }
+    }
+}
+
 type Table<'a> = HashMap<(u64, &'a str), (u64, &'a Term)>;
 
-fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
-    match t {
-        Term::Constant(_) => true,
-        Term::Variable(s1) => match r.get(&(nst, s1)) {
-            Some(&g) => occurs_check((nsv, s), g, r),
-            None => !(nsv == nst && s == s1),
-        },
-        Term::Compound(_, args) => args
-            .into_iter()
-            .all(|c| occurs_check((nsv, s), (nst, c), r)),
+fn free_variables<'a>(
+    t: &'a Term,
+    ns: u64,
+    r: &'a Table,
+) -> Box<dyn Iterator<Item = (u64, &'a str)> + 'a> {
+    let mut res: Box<dyn Iterator<Item = (u64, &'a str)> + 'a> = Box::new(empty());
+    for s in t.variables() {
+        res = match r.get(&(ns, s)) {
+            Some(&(nst, t)) => Box::new(res.chain(free_variables(t, nst, r))),
+            None => Box::new(res.chain(once((ns, s)))),
+        };
     }
+    res
+}
+
+fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
+    free_variables(t, nst, r).all(|x| x != (nsv, s))
 }
 
 fn unify<'a>(
