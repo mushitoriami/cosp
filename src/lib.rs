@@ -13,38 +13,54 @@ pub enum Term {
     Compound(String, Terms),
 }
 
-type TermsIter<'a> = Iter<'a, Term>;
+type TermsIter<'a> = &'a Terms;
+
+impl<'a> Iterator for &'a Terms {
+    type Item = &'a Term;
+    fn next(&mut self) -> Option<Self::Item> {
+        let Terms::Cons(term, terms) = self else {
+            return None;
+        };
+        *self = terms;
+        Some(term)
+    }
+}
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
-pub struct Terms {
-    vec: Vec<Term>,
+pub enum Terms {
+    Empty(),
+    Cons(Box<Term>, Box<Terms>),
 }
 
 impl<T: Into<Vec<Term>>> From<T> for Terms {
     fn from(vec: T) -> Self {
-        Terms { vec: vec.into() }
-    }
-}
-
-impl<'a> IntoIterator for &'a Terms {
-    type Item = &'a Term;
-    type IntoIter = TermsIter<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.vec.iter()
+        let mut terms = Terms::Empty();
+        for term in vec.into().into_iter().rev() {
+            terms = Terms::Cons(Box::new(term), Box::new(terms));
+        }
+        terms
     }
 }
 
 impl Terms {
     fn new() -> Self {
-        return Terms { vec: Vec::new() };
+        Terms::Empty()
     }
-    fn head_and_tail(head: Term, mut tail: Self) -> Self {
-        tail.vec.insert(0, head);
-        return tail;
+    fn head_and_tail(head: Term, tail: Self) -> Self {
+        Terms::Cons(Box::new(head), Box::new(tail))
     }
     fn len(&self) -> usize {
-        self.vec.len()
+        match self {
+            Terms::Empty() => 0,
+            Terms::Cons(_, terms) => terms.len() + 1,
+        }
+    }
+    fn is_empty(&self) -> bool {
+        match self {
+            Terms::Empty() => true,
+            Terms::Cons(_, _) => false,
+        }
     }
 }
 
@@ -301,7 +317,7 @@ impl<'a> Infer<'a> {
         shared: &mut Vec<(u64, &'a Term)>,
     ) {
         while let Some((namespace, head, goals_iter)) = goals.last_mut()
-            && goals_iter.len() == 0
+            && goals_iter.is_empty()
         {
             shared.push((*namespace, head));
             goals.pop();
