@@ -196,14 +196,14 @@ fn occurs_check(
     r: &HashMap<(u64, &str), (u64, &Term)>,
 ) -> bool {
     match t {
+        Term::Constant(_) => true,
+        Term::Variable(s1) => match r.get(&(nst, s1)) {
+            Some(&g) => occurs_check((nsv, s), g, r),
+            None => !(nsv == nst && s == s1),
+        },
         Term::Compound(_, args) => args
             .into_iter()
             .all(|c| occurs_check((nsv, s), (nst, c), r)),
-        Term::Variable(s1) if nsv == nst && s == s1 => false,
-        Term::Variable(s1) => r
-            .get(&(nst, s1))
-            .is_none_or(|&(ns1, t1)| occurs_check((nsv, s), (ns1, t1), r)),
-        _ => true,
     }
 }
 
