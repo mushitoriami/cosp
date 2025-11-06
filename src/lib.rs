@@ -223,29 +223,40 @@ fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> boo
     })
 }
 
+fn matchings_terms<'a>(ts1: &'a Terms, ts2: &'a Terms) -> Option<Vec<(&'a Term, &'a Term)>> {
+    (ts1.len() == ts2.len()).then_some(())?;
+    let mut res = Vec::new();
+    for (c1, c2) in ts1.into_iter().zip(ts2.into_iter()) {
+        res.extend(matchings(c1, c2)?);
+    }
+    Some(res)
+}
+
+fn matchings<'a>(t1: &'a Term, t2: &'a Term) -> Option<Vec<(&'a Term, &'a Term)>> {
+    match (t1, t2) {
+        (Term::Constant(s1), Term::Constant(s2)) if s1 == s2 => Some(Vec::new()),
+        (Term::Variable(_), _) | (_, Term::Variable(_)) => Some(vec![(t1, t2)]),
+        (Term::Compound(s1, ts1), Term::Compound(s2, ts2)) if s1 == s2 => matchings_terms(ts1, ts2),
+        _ => None,
+    }
+}
+
+fn add_matching<'a>(goal1: (u64, &'a str), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
+    match r.get(&goal1) {
+        Some(&goal) => unify(goal, goal2, r),
+        None => occurs_check(goal1, goal2, r) && r.insert(goal1, goal2).is_none(),
+    }
+}
+
 fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
-    match (goal1, goal2) {
-        ((ns1, Term::Compound(s1, args1)), (ns2, Term::Compound(s2, args2)))
-            if s1 == s2 && args1.len() == args2.len() =>
-        {
-            let mut iter = args1.into_iter().zip(args2.into_iter());
-            iter.all(|(c1, c2)| unify((ns1, c1), (ns2, c2), r))
-        }
-        ((_, Term::Constant(s1)), (_, Term::Constant(s2))) if s1 == s2 => true,
-        ((ns1, Term::Variable(s1)), (ns2, Term::Variable(s2))) if ns1 == ns2 && s1 == s2 => true,
-        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
-            if r.contains_key(&(ns, s)) =>
-        {
-            let &goal_variable = r.get(&(ns, s)).unwrap();
-            unify(goal_variable, goal, r)
-        }
-        ((ns, Term::Variable(s)), goal) | (goal, (ns, Term::Variable(s)))
-            if occurs_check((ns, s), goal, &r) =>
-        {
-            r.insert((ns, s), goal);
-            true
-        }
-        _ => false,
+    match matchings(goal1.1, goal2.1) {
+        Some(m) => m.into_iter().all(|x| match x {
+            (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
+            (Term::Variable(s), t) => add_matching((goal1.0, s), (goal2.0, t), r),
+            (t, Term::Variable(s)) => add_matching((goal2.0, s), (goal1.0, t), r),
+            _ => unreachable!(),
+        }),
+        None => false,
     }
 }
 
@@ -1008,8 +1019,8 @@ mod tests {
                     ((1, "x"), (0, &"tom*".parse().unwrap())),
                     ((1, "z"), (0, &"pat*".parse().unwrap())),
                     ((1, "y"), (2, &"bob*".parse().unwrap())),
-                    ((3, "x"), (2, &"bob*".parse().unwrap())),
-                    ((3, "z"), (0, &"pat*".parse().unwrap()))
+                    ((3, "x"), (1, &"y?".parse().unwrap())),
+                    ((3, "z"), (1, &"z?".parse().unwrap()))
                 ])
             )]
         )
