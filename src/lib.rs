@@ -33,8 +33,8 @@ pub enum Terms {
     Cons(Box<Term>, Box<Terms>),
 }
 
-impl FromIterator<Term> for Terms{
-    fn from_iter<I: IntoIterator<Item=Term>>(iterable: I) -> Self {
+impl FromIterator<Term> for Terms {
+    fn from_iter<I: IntoIterator<Item = Term>>(iterable: I) -> Self {
         let mut iter = iterable.into_iter();
         match iter.next() {
             Some(term) => Terms::head_and_tail(term, iter.collect()),
@@ -577,8 +577,7 @@ mod tests {
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
                 ])
-            )])
-            )
+            )]))
         );
     }
 
@@ -605,8 +604,7 @@ mod tests {
                 ),
                 Term::Compound(
                     String::from("h"),
-                    Terms::from_iter(
-                    [Term::Constant(String::from("d"))])
+                    Terms::from_iter([Term::Constant(String::from("d"))])
                 )
             ]))
         );
