@@ -13,12 +13,13 @@ pub enum Term {
     Compound(String, Terms),
 }
 
+type Terms = List<Term>;
 type TermsIter<'a> = &'a Terms;
 
-impl<'a> Iterator for &'a Terms {
-    type Item = &'a Term;
+impl<'a, T> Iterator for &'a List<T> {
+    type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        let Terms::Cons(term, terms) = self else {
+        let List::Cons(term, terms) = self else {
             return None;
         };
         *self = terms;
@@ -28,38 +29,38 @@ impl<'a> Iterator for &'a Terms {
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
-pub enum Terms {
+pub enum List<T> {
     Empty(),
-    Cons(Box<Term>, Box<Terms>),
+    Cons(Box<T>, Box<List<T>>),
 }
 
-impl FromIterator<Term> for Terms {
-    fn from_iter<I: IntoIterator<Item = Term>>(iterable: I) -> Self {
+impl<T> FromIterator<T> for List<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iterable: I) -> Self {
         let mut iter = iterable.into_iter();
         match iter.next() {
-            Some(term) => Terms::head_and_tail(term, iter.collect()),
-            None => Terms::new(),
+            Some(term) => List::head_and_tail(term, iter.collect()),
+            None => List::new(),
         }
     }
 }
 
-impl Terms {
+impl<T> List<T> {
     fn new() -> Self {
-        Terms::Empty()
+        List::Empty()
     }
-    fn head_and_tail(head: Term, tail: Self) -> Self {
-        Terms::Cons(Box::new(head), Box::new(tail))
+    fn head_and_tail(head: T, tail: Self) -> Self {
+        List::Cons(Box::new(head), Box::new(tail))
     }
     fn len(&self) -> usize {
         match self {
-            Terms::Empty() => 0,
-            Terms::Cons(_, terms) => terms.len() + 1,
+            List::Empty() => 0,
+            List::Cons(_, terms) => terms.len() + 1,
         }
     }
     fn is_empty(&self) -> bool {
         match self {
-            Terms::Empty() => true,
-            Terms::Cons(_, _) => false,
+            List::Empty() => true,
+            List::Cons(_, _) => false,
         }
     }
 }
