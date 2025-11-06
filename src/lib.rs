@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::slice::Iter;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -71,37 +70,9 @@ pub enum Rule {
     Rule(u64, Term, Terms),
 }
 
-type RulesIter<'a> = Iter<'a, Rule>;
+type Rules = List<Rule>;
+type RulesIter<'a> = &'a Rules;
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct Rules {
-    vec: Vec<Rule>,
-}
-
-impl<T: Into<Vec<Rule>>> From<T> for Rules {
-    fn from(vec: T) -> Self {
-        Rules { vec: vec.into() }
-    }
-}
-
-impl<'a> IntoIterator for &'a Rules {
-    type Item = &'a Rule;
-    type IntoIter = RulesIter<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.vec.iter()
-    }
-}
-
-impl Rules {
-    fn new() -> Self {
-        return Rules { vec: Vec::new() };
-    }
-    fn head_and_tail(head: Rule, mut tail: Self) -> Self {
-        tail.vec.insert(0, head);
-        return tail;
-    }
-}
 
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
@@ -616,7 +587,7 @@ mod tests {
         let rules = "[2]a* :- b*, c?.   \n[4]d*.\n".parse::<Rules>();
         assert_eq!(
             rules,
-            Ok([
+            Ok(Rules::from_iter([
                 Rule::Rule(
                     2,
                     Term::Constant(String::from("a")),
@@ -626,8 +597,7 @@ mod tests {
                     ])
                 ),
                 Rule::Rule(4, Term::Constant(String::from("d")), Terms::new())
-            ]
-            .into())
+            ]))
         );
     }
 
