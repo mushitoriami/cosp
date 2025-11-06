@@ -12,8 +12,23 @@ pub enum Term {
     Compound(String, Terms),
 }
 
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum Rule {
+    Rule(u64, Term, Terms),
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum List<T> {
+    Empty(),
+    Cons(Box<T>, Box<List<T>>),
+}
+
 type Terms = List<Term>;
 type TermsIter<'a> = &'a Terms;
+type Rules = List<Rule>;
+type RulesIter<'a> = &'a Rules;
 
 impl<'a, T> Iterator for &'a List<T> {
     type Item = &'a T;
@@ -24,13 +39,6 @@ impl<'a, T> Iterator for &'a List<T> {
         *self = terms;
         Some(term)
     }
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum List<T> {
-    Empty(),
-    Cons(Box<T>, Box<List<T>>),
 }
 
 impl<T> FromIterator<T> for List<T> {
@@ -63,16 +71,6 @@ impl<T> List<T> {
         }
     }
 }
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum Rule {
-    Rule(u64, Term, Terms),
-}
-
-type Rules = List<Rule>;
-type RulesIter<'a> = &'a Rules;
-
 
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
