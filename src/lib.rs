@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -257,22 +256,22 @@ impl PartialOrd for State<'_> {
 
 impl Ord for State<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.cost.cmp(&other.cost)
+        self.cost.cmp(&other.cost).reverse()
     }
 }
 
 struct Infer<'a> {
     rules_iter: RulesIter<'a>,
-    pq: BinaryHeap<Reverse<State<'a>>>,
+    pq: BinaryHeap<State<'a>>,
 }
 
 impl<'a> Infer<'a> {
     fn push_state(&mut self, state: State<'a>) {
-        self.pq.push(Reverse(state))
+        self.pq.push(state)
     }
 
     fn pop_state(&mut self) -> Option<State<'a>> {
-        self.pq.pop().map(|x| x.0)
+        self.pq.pop()
     }
 
     fn push_goals(
@@ -355,7 +354,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let rules_iter = rules.into_iter();
     Infer {
         rules_iter: rules_iter.clone(),
-        pq: BinaryHeap::from([Reverse(State {
+        pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 0,
             table: HashMap::new(),
@@ -363,7 +362,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
             shared_remaining: Vec::new(),
             goals: vec![(0, goals_iter.clone().next().unwrap(), goals_iter.clone())],
             rules_iter: rules_iter.clone(),
-        })]),
+        }]),
     }
 }
 
