@@ -238,6 +238,25 @@ struct State<'a> {
     shared_remaining: Vec<(u64, &'a Term)>,
     goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
     rules_iter: RulesIter<'a>,
+    rules_iter_orig: RulesIter<'a>,
+}
+
+impl<'a> State<'a> {
+    fn push_goals(&mut self, goals_iter: (u64, &'a Term, TermsIter<'a>)) {
+        self.goals.push(goals_iter)
+    }
+    fn pop_goal(&mut self) -> (u64, &'a Term) {
+        let (namespace, _, iter) = self.goals.last_mut().unwrap();
+        (*namespace, iter.next().unwrap())
+    }
+    fn update_goals(&mut self) {
+        while let Some((namespace, head, goals_iter)) = self.goals.last_mut()
+            && goals_iter.is_empty()
+        {
+            self.shared.push((*namespace, head));
+            self.goals.pop();
+        }
+    }
 }
 
 impl Eq for State<'_> {}
@@ -261,36 +280,7 @@ impl Ord for State<'_> {
 }
 
 struct Infer<'a> {
-    rules_iter: RulesIter<'a>,
     pq: BinaryHeap<State<'a>>,
-}
-
-impl<'a> Infer<'a> {
-    fn push_goals(
-        &mut self,
-        goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>,
-        goals_iter: (u64, &'a Term, TermsIter<'a>),
-    ) {
-        goals.push(goals_iter)
-    }
-
-    fn pop_goal(&mut self, goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>) -> (u64, &'a Term) {
-        let (namespace, _, iter) = goals.last_mut().unwrap();
-        (*namespace, iter.next().unwrap())
-    }
-
-    fn update_goals(
-        &mut self,
-        goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>,
-        shared: &mut Vec<(u64, &'a Term)>,
-    ) {
-        while let Some((namespace, head, goals_iter)) = goals.last_mut()
-            && goals_iter.is_empty()
-        {
-            shared.push((*namespace, head));
-            goals.pop();
-        }
-    }
 }
 
 impl<'a> Iterator for Infer<'a> {
@@ -304,12 +294,12 @@ impl<'a> Iterator for Infer<'a> {
             }
             if let Some((namespace, term)) = state.shared_remaining.pop() {
                 self.pq.push(state.clone());
-                let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
+                let (namespace_goal, goal) = state.pop_goal();
                 if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
                     continue;
                 };
-                self.update_goals(&mut state.goals, &mut state.shared);
-                state.rules_iter = self.rules_iter.clone();
+                state.update_goals();
+                state.rules_iter = state.rules_iter_orig.clone();
                 state.shared_remaining = state.shared.clone();
                 self.pq.push(state);
                 continue;
@@ -318,7 +308,7 @@ impl<'a> Iterator for Infer<'a> {
                 continue;
             };
             self.pq.push(state.clone());
-            let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
+            let (namespace_goal, goal) = state.pop_goal();
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
             if !unify(
@@ -328,9 +318,9 @@ impl<'a> Iterator for Infer<'a> {
             ) {
                 continue;
             };
-            self.push_goals(&mut state.goals, (state.namespace, head, body.into_iter()));
-            self.update_goals(&mut state.goals, &mut state.shared);
-            state.rules_iter = self.rules_iter.clone();
+            state.push_goals((state.namespace, head, body.into_iter()));
+            state.update_goals();
+            state.rules_iter = state.rules_iter_orig.clone();
             state.shared_remaining = state.shared.clone();
             self.pq.push(state);
         }
@@ -341,7 +331,6 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let goals_iter = goals.into_iter();
     let rules_iter = rules.into_iter();
     Infer {
-        rules_iter: rules_iter.clone(),
         pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 0,
@@ -350,6 +339,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
             shared_remaining: Vec::new(),
             goals: vec![(0, goals_iter.clone().next().unwrap(), goals_iter.clone())],
             rules_iter: rules_iter.clone(),
+            rules_iter_orig: rules_iter.clone(),
         }]),
     }
 }
