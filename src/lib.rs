@@ -259,6 +259,42 @@ impl<'a> State<'a> {
     }
 }
 
+impl<'a> Iterator for State<'a> {
+    type Item = Option<State<'a>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((namespace, term)) = self.shared_remaining.pop() {
+            let mut state = self.clone();
+            let (namespace_goal, goal) = state.pop_goal();
+            if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
+                return Some(None);
+            }
+            state.update_goals();
+            state.rules_iter = state.rules_iter_orig.clone();
+            state.shared_remaining = state.shared.clone();
+            Some(Some(state))
+        } else if let Some(Rule::Rule(cost_rule, head, body)) = self.rules_iter.next() {
+            let mut state = self.clone();
+            let (namespace_goal, goal) = state.pop_goal();
+            state.cost = state.cost + cost_rule;
+            state.namespace += 1;
+            if !unify(
+                (state.namespace, head),
+                (namespace_goal, goal),
+                &mut state.table,
+            ) {
+                return Some(None);
+            }
+            state.push_goals((state.namespace, head, body.into_iter()));
+            state.update_goals();
+            state.rules_iter = state.rules_iter_orig.clone();
+            state.shared_remaining = state.shared.clone();
+            Some(Some(state))
+        } else {
+            None
+        }
+    }
+}
+
 impl Eq for State<'_> {}
 
 impl PartialEq for State<'_> {
@@ -285,44 +321,18 @@ struct Infer<'a> {
 
 impl<'a> Iterator for Infer<'a> {
     type Item = (u64, Table<'a>);
-
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let mut state = self.pq.pop()?;
             if state.goals.is_empty() {
                 return Some((state.cost, state.table));
             }
-            if let Some((namespace, term)) = state.shared_remaining.pop() {
-                self.pq.push(state.clone());
-                let (namespace_goal, goal) = state.pop_goal();
-                if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
-                    continue;
-                };
-                state.update_goals();
-                state.rules_iter = state.rules_iter_orig.clone();
-                state.shared_remaining = state.shared.clone();
+            if let Some(state_next_option) = state.next() {
                 self.pq.push(state);
-                continue;
+                if let Some(state_next) = state_next_option {
+                    self.pq.push(state_next)
+                }
             }
-            let Some(Rule::Rule(cost_rule, head, body)) = state.rules_iter.next() else {
-                continue;
-            };
-            self.pq.push(state.clone());
-            let (namespace_goal, goal) = state.pop_goal();
-            state.cost = state.cost + cost_rule;
-            state.namespace += 1;
-            if !unify(
-                (state.namespace, head),
-                (namespace_goal, goal),
-                &mut state.table,
-            ) {
-                continue;
-            };
-            state.push_goals((state.namespace, head, body.into_iter()));
-            state.update_goals();
-            state.rules_iter = state.rules_iter_orig.clone();
-            state.shared_remaining = state.shared.clone();
-            self.pq.push(state);
         }
     }
 }
