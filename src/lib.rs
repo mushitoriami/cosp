@@ -266,14 +266,6 @@ struct Infer<'a> {
 }
 
 impl<'a> Infer<'a> {
-    fn push_state(&mut self, state: State<'a>) {
-        self.pq.push(state)
-    }
-
-    fn pop_state(&mut self) -> Option<State<'a>> {
-        self.pq.pop()
-    }
-
     fn push_goals(
         &mut self,
         goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>,
@@ -285,10 +277,6 @@ impl<'a> Infer<'a> {
     fn pop_goal(&mut self, goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>) -> (u64, &'a Term) {
         let (namespace, _, iter) = goals.last_mut().unwrap();
         (*namespace, iter.next().unwrap())
-    }
-
-    fn is_empty_goal(&mut self, goals: &mut Vec<(u64, &'a Term, TermsIter<'a>)>) -> bool {
-        goals.is_empty()
     }
 
     fn update_goals(
@@ -310,12 +298,12 @@ impl<'a> Iterator for Infer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let mut state = self.pop_state()?;
-            if self.is_empty_goal(&mut state.goals) {
+            let mut state = self.pq.pop()?;
+            if state.goals.is_empty() {
                 return Some((state.cost, state.table));
             }
             if let Some((namespace, term)) = state.shared_remaining.pop() {
-                self.push_state(state.clone());
+                self.pq.push(state.clone());
                 let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
                 if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
                     continue;
@@ -323,13 +311,13 @@ impl<'a> Iterator for Infer<'a> {
                 self.update_goals(&mut state.goals, &mut state.shared);
                 state.rules_iter = self.rules_iter.clone();
                 state.shared_remaining = state.shared.clone();
-                self.push_state(state);
+                self.pq.push(state);
                 continue;
             }
             let Some(Rule::Rule(cost_rule, head, body)) = state.rules_iter.next() else {
                 continue;
             };
-            self.push_state(state.clone());
+            self.pq.push(state.clone());
             let (namespace_goal, goal) = self.pop_goal(&mut state.goals);
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
@@ -344,7 +332,7 @@ impl<'a> Iterator for Infer<'a> {
             self.update_goals(&mut state.goals, &mut state.shared);
             state.rules_iter = self.rules_iter.clone();
             state.shared_remaining = state.shared.clone();
-            self.push_state(state);
+            self.pq.push(state);
         }
     }
 }
