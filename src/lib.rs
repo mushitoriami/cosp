@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::slice::Iter;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -13,12 +12,28 @@ pub enum Term {
     Compound(String, Terms),
 }
 
-type TermsIter<'a> = &'a Terms;
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum Rule {
+    Rule(u64, Term, Terms),
+}
 
-impl<'a> Iterator for &'a Terms {
-    type Item = &'a Term;
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum List<T> {
+    Empty(),
+    Cons(Box<T>, Box<List<T>>),
+}
+
+type Terms = List<Term>;
+type TermsIter<'a> = &'a Terms;
+type Rules = List<Rule>;
+type RulesIter<'a> = &'a Rules;
+
+impl<'a, T> Iterator for &'a List<T> {
+    type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        let Terms::Cons(term, terms) = self else {
+        let List::Cons(term, terms) = self else {
             return None;
         };
         *self = terms;
@@ -26,79 +41,34 @@ impl<'a> Iterator for &'a Terms {
     }
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum Terms {
-    Empty(),
-    Cons(Box<Term>, Box<Terms>),
-}
-
-impl FromIterator<Term> for Terms {
-    fn from_iter<I: IntoIterator<Item = Term>>(iterable: I) -> Self {
+impl<T> FromIterator<T> for List<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iterable: I) -> Self {
         let mut iter = iterable.into_iter();
         match iter.next() {
-            Some(term) => Terms::head_and_tail(term, iter.collect()),
-            None => Terms::new(),
+            Some(term) => List::head_and_tail(term, iter.collect()),
+            None => List::new(),
         }
     }
 }
 
-impl Terms {
+impl<T> List<T> {
     fn new() -> Self {
-        Terms::Empty()
+        List::Empty()
     }
-    fn head_and_tail(head: Term, tail: Self) -> Self {
-        Terms::Cons(Box::new(head), Box::new(tail))
+    fn head_and_tail(head: T, tail: Self) -> Self {
+        List::Cons(Box::new(head), Box::new(tail))
     }
     fn len(&self) -> usize {
         match self {
-            Terms::Empty() => 0,
-            Terms::Cons(_, terms) => terms.len() + 1,
+            List::Empty() => 0,
+            List::Cons(_, terms) => terms.len() + 1,
         }
     }
     fn is_empty(&self) -> bool {
         match self {
-            Terms::Empty() => true,
-            Terms::Cons(_, _) => false,
+            List::Empty() => true,
+            List::Cons(_, _) => false,
         }
-    }
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum Rule {
-    Rule(u64, Term, Terms),
-}
-
-type RulesIter<'a> = Iter<'a, Rule>;
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct Rules {
-    vec: Vec<Rule>,
-}
-
-impl<T: Into<Vec<Rule>>> From<T> for Rules {
-    fn from(vec: T) -> Self {
-        Rules { vec: vec.into() }
-    }
-}
-
-impl<'a> IntoIterator for &'a Rules {
-    type Item = &'a Rule;
-    type IntoIter = RulesIter<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.vec.iter()
-    }
-}
-
-impl Rules {
-    fn new() -> Self {
-        return Rules { vec: Vec::new() };
-    }
-    fn head_and_tail(head: Rule, mut tail: Self) -> Self {
-        tail.vec.insert(0, head);
-        return tail;
     }
 }
 
@@ -615,7 +585,7 @@ mod tests {
         let rules = "[2]a* :- b*, c?.   \n[4]d*.\n".parse::<Rules>();
         assert_eq!(
             rules,
-            Ok([
+            Ok(Rules::from_iter([
                 Rule::Rule(
                     2,
                     Term::Constant(String::from("a")),
@@ -625,8 +595,7 @@ mod tests {
                     ])
                 ),
                 Rule::Rule(4, Term::Constant(String::from("d")), Terms::new())
-            ]
-            .into())
+            ]))
         );
     }
 
