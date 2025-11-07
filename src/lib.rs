@@ -33,13 +33,13 @@ pub enum Terms {
     Cons(Box<Term>, Box<Terms>),
 }
 
-impl<T: Into<Vec<Term>>> From<T> for Terms {
-    fn from(vec: T) -> Self {
-        let mut terms = Terms::Empty();
-        for term in vec.into().into_iter().rev() {
-            terms = Terms::Cons(Box::new(term), Box::new(terms));
+impl FromIterator<Term> for Terms {
+    fn from_iter<I: IntoIterator<Item = Term>>(iterable: I) -> Self {
+        let mut iter = iterable.into_iter();
+        match iter.next() {
+            Some(term) => Terms::head_and_tail(term, iter.collect()),
+            None => Terms::new(),
         }
-        terms
     }
 }
 
@@ -469,14 +469,13 @@ mod tests {
             "ab(c_d(e_f*),g_h?)".parse(),
             Ok(Term::Compound(
                 String::from("ab"),
-                [
+                Terms::from_iter([
                     Term::Compound(
                         String::from("c_d"),
-                        [Term::Constant(String::from("e_f"))].into(),
+                        Terms::from_iter([Term::Constant(String::from("e_f"))]),
                     ),
                     Term::Variable(String::from("g_h")),
-                ]
-                .into(),
+                ]),
             ))
         );
     }
@@ -537,12 +536,11 @@ mod tests {
             "f(a*, b*, x?)".parse(),
             Ok(Term::Compound(
                 String::from("f"),
-                [
+                Terms::from_iter([
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
-                ]
-                .into(),
+                ]),
             ))
         );
     }
@@ -572,16 +570,14 @@ mod tests {
         let query = "f(a*, b*, x?).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok([Term::Compound(
+            Ok(Terms::from_iter([Term::Compound(
                 String::from("f"),
-                [
+                Terms::from_iter([
                     Term::Constant(String::from("a")),
                     Term::Constant(String::from("b")),
                     Term::Variable(String::from("x")),
-                ]
-                .into()
-            )]
-            .into())
+                ])
+            )]))
         );
     }
 
@@ -590,30 +586,27 @@ mod tests {
         let query = "f(a*, b*, x?), g(c*, y?), h(d*).".parse::<Terms>();
         assert_eq!(
             query,
-            Ok([
+            Ok(Terms::from_iter([
                 Term::Compound(
                     String::from("f"),
-                    [
+                    Terms::from_iter([
                         Term::Constant(String::from("a")),
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("x")),
-                    ]
-                    .into()
+                    ])
                 ),
                 Term::Compound(
                     String::from("g"),
-                    [
+                    Terms::from_iter([
                         Term::Constant(String::from("c")),
                         Term::Variable(String::from("y")),
-                    ]
-                    .into()
+                    ])
                 ),
                 Term::Compound(
                     String::from("h"),
-                    [Term::Constant(String::from("d"))].into()
+                    Terms::from_iter([Term::Constant(String::from("d"))])
                 )
-            ]
-            .into())
+            ]))
         );
     }
 
@@ -626,11 +619,10 @@ mod tests {
                 Rule::Rule(
                     2,
                     Term::Constant(String::from("a")),
-                    [
+                    Terms::from_iter([
                         Term::Constant(String::from("b")),
                         Term::Variable(String::from("c"))
-                    ]
-                    .into()
+                    ])
                 ),
                 Rule::Rule(4, Term::Constant(String::from("d")), Terms::new())
             ]
