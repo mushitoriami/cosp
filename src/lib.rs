@@ -328,8 +328,7 @@ struct Infer<'a> {
 impl<'a> Iterator for Infer<'a> {
     type Item = (u64, Table<'a>);
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let mut state = self.pq.pop()?;
+        while let Some(mut state) = self.pq.pop() {
             if state.is_end() {
                 return Some(state.cost_and_table());
             }
@@ -340,6 +339,7 @@ impl<'a> Iterator for Infer<'a> {
                 }
             }
         }
+        None
     }
 }
 
