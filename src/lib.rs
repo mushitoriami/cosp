@@ -25,9 +25,7 @@ pub enum List<T> {
 }
 
 type Terms = List<Term>;
-type TermsIter<'a> = &'a Terms;
 type Rules = List<Rule>;
-type RulesIter<'a> = &'a Rules;
 
 impl<'a, T> Iterator for &'a List<T> {
     type Item = &'a T;
@@ -236,9 +234,9 @@ struct State<'a> {
     table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
-    goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
-    rules_iter: RulesIter<'a>,
-    rules_iter_orig: RulesIter<'a>,
+    goals: Vec<(u64, &'a Term, &'a Terms)>,
+    rules_iter: &'a Rules,
+    rules_iter_orig: &'a Rules,
 }
 
 impl<'a> State<'a> {
@@ -248,7 +246,7 @@ impl<'a> State<'a> {
     fn cost_and_table(self) -> (u64, Table<'a>) {
         (self.cost, self.table)
     }
-    fn push_goals(&mut self, goals_iter: (u64, &'a Term, TermsIter<'a>)) {
+    fn push_goals(&mut self, goals_iter: (u64, &'a Term, &'a Terms)) {
         self.goals.push(goals_iter)
     }
     fn pop_goal(&mut self) -> (u64, &'a Term) {
@@ -275,7 +273,7 @@ impl<'a> Iterator for State<'a> {
                 return Some(None);
             }
             state.update_goals();
-            state.rules_iter = state.rules_iter_orig.clone();
+            state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
         } else if let Some(Rule::Rule(cost_rule, head, body)) = self.rules_iter.next() {
@@ -292,7 +290,7 @@ impl<'a> Iterator for State<'a> {
             }
             state.push_goals((state.namespace, head, body.into_iter()));
             state.update_goals();
-            state.rules_iter = state.rules_iter_orig.clone();
+            state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
         } else {
@@ -344,6 +342,8 @@ impl<'a> Iterator for Infer<'a> {
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let goals_iter = goals.into_iter();
+    let mut goals_iter_tmp = goals_iter;
+    let goal_first = goals_iter_tmp.next().unwrap();
     let rules_iter = rules.into_iter();
     Infer {
         pq: BinaryHeap::from([State {
@@ -352,9 +352,9 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
             table: HashMap::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
-            goals: vec![(0, goals_iter.clone().next().unwrap(), goals_iter.clone())],
-            rules_iter: rules_iter.clone(),
-            rules_iter_orig: rules_iter.clone(),
+            goals: vec![(0, goal_first, goals_iter)],
+            rules_iter: rules_iter,
+            rules_iter_orig: rules_iter,
         }]),
     }
 }
