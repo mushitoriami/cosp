@@ -1333,4 +1333,19 @@ mod tests {
             ]
         )
     }
+
+    const RULES7: &str = r#"
+        [1] a* :- a*.
+        [3] a*.
+    "#;
+
+    #[test]
+    fn test_infer_7_1() {
+        let rules = &RULES7.parse().unwrap();
+        let query = &"a*.".parse().unwrap();
+        assert_eq!(
+            infer_iter(query, rules).flatten().next().unwrap(),
+            (3, HashMap::new())
+        )
+    }
 }
