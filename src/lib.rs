@@ -275,7 +275,7 @@ impl<'a> Iterator for State<'a> {
                 return Some(None);
             }
             state.update_goals();
-            state.rules_iter = state.rules_iter_orig.clone();
+            state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
         } else if let Some(Rule::Rule(cost_rule, head, body)) = self.rules_iter.next() {
@@ -292,7 +292,7 @@ impl<'a> Iterator for State<'a> {
             }
             state.push_goals((state.namespace, head, body.into_iter()));
             state.update_goals();
-            state.rules_iter = state.rules_iter_orig.clone();
+            state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
         } else {
@@ -344,6 +344,8 @@ impl<'a> Iterator for Infer<'a> {
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let goals_iter = goals.into_iter();
+    let mut goals_iter_tmp = goals_iter;
+    let goal_first = goals_iter_tmp.next().unwrap();
     let rules_iter = rules.into_iter();
     Infer {
         pq: BinaryHeap::from([State {
@@ -352,9 +354,9 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
             table: HashMap::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
-            goals: vec![(0, goals_iter.clone().next().unwrap(), goals_iter.clone())],
-            rules_iter: rules_iter.clone(),
-            rules_iter_orig: rules_iter.clone(),
+            goals: vec![(0, goal_first, goals_iter)],
+            rules_iter: rules_iter,
+            rules_iter_orig: rules_iter,
         }]),
     }
 }
