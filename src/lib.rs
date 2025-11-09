@@ -25,9 +25,7 @@ pub enum List<T> {
 }
 
 type Terms = List<Term>;
-type TermsIter<'a> = &'a Terms;
 type Rules = List<Rule>;
-type RulesIter<'a> = &'a Rules;
 
 impl<'a, T> Iterator for &'a List<T> {
     type Item = &'a T;
@@ -236,9 +234,9 @@ struct State<'a> {
     table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
-    goals: Vec<(u64, &'a Term, TermsIter<'a>)>,
-    rules_iter: RulesIter<'a>,
-    rules_iter_orig: RulesIter<'a>,
+    goals: Vec<(u64, &'a Term, &'a Terms)>,
+    rules_iter: &'a Rules,
+    rules_iter_orig: &'a Rules,
 }
 
 impl<'a> State<'a> {
@@ -248,7 +246,7 @@ impl<'a> State<'a> {
     fn cost_and_table(self) -> (u64, Table<'a>) {
         (self.cost, self.table)
     }
-    fn push_goals(&mut self, goals_iter: (u64, &'a Term, TermsIter<'a>)) {
+    fn push_goals(&mut self, goals_iter: (u64, &'a Term, &'a Terms)) {
         self.goals.push(goals_iter)
     }
     fn pop_goal(&mut self) -> (u64, &'a Term) {
