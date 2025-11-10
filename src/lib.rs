@@ -73,7 +73,6 @@ fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>
     match goal {
         (ns, Term::Compound(label, args)) => {
             let goals_string: Vec<String> = args
-                .into_iter()
                 .map(|x| stringify_goal((ns, x), table))
                 .collect();
             label.clone() + "(" + &goals_string.join(", ") + ")"
@@ -179,7 +178,7 @@ fn variables(t: &Term) -> Vec<&str> {
     match t {
         Term::Constant(_) => Vec::new(),
         Term::Variable(s) => [s.as_str()].into(),
-        Term::Compound(_, args) => args.into_iter().flat_map(|x| variables(x)).collect(),
+        Term::Compound(_, args) => args.flat_map(|x| variables(x)).collect(),
     }
 }
 
@@ -193,7 +192,7 @@ fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> boo
 fn matchings_terms<'a>(ts1: &'a Terms, ts2: &'a Terms) -> Option<Vec<(&'a Term, &'a Term)>> {
     (ts1.len() == ts2.len()).then_some(())?;
     let mut res = Vec::new();
-    for (c1, c2) in ts1.into_iter().zip(ts2.into_iter()) {
+    for (c1, c2) in ts1.zip(ts2) {
         res.extend(matchings(c1, c2)?);
     }
     Some(res)
@@ -288,7 +287,7 @@ impl<'a> Iterator for State<'a> {
             ) {
                 return Some(None);
             }
-            state.push_goals((state.namespace, head, body.into_iter()));
+            state.push_goals((state.namespace, head, body));
             state.update_goals();
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
@@ -341,10 +340,10 @@ impl<'a> Iterator for Infer<'a> {
 }
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
-    let goals_iter = goals.into_iter();
+    let goals_iter = goals;
     let mut goals_iter_tmp = goals_iter;
     let goal_first = goals_iter_tmp.next().unwrap();
-    let rules_iter = rules.into_iter();
+    let rules_iter = rules;
     Infer {
         pq: BinaryHeap::from([State {
             cost: 0,
