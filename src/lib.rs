@@ -72,9 +72,7 @@ impl<T> List<T> {
 fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
     match goal {
         (ns, Term::Compound(label, args)) => {
-            let goals_string: Vec<String> = args
-                .map(|x| stringify_goal((ns, x), table))
-                .collect();
+            let goals_string: Vec<String> = args.map(|x| stringify_goal((ns, x), table)).collect();
             label.clone() + "(" + &goals_string.join(", ") + ")"
         }
         (_, Term::Constant(label)) => label.clone() + "*",
