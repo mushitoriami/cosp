@@ -301,7 +301,6 @@ impl<'a> Iterator for State<'a> {
             let mut state = self.clone();
             let (namespace_goal, goal) = state.pop_goal()?;
             state.cost = state.cost + rule.cost;
-            state.namespace += 1;
             if !state
                 .table
                 .unify((state.namespace, &rule.head), (namespace_goal, goal))
@@ -310,6 +309,7 @@ impl<'a> Iterator for State<'a> {
             }
             state.push_goals((state.namespace, &rule.head, &rule.body));
             state.update_goals();
+            state.namespace += 1;
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
@@ -364,7 +364,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     Infer {
         pq: BinaryHeap::from([State {
             cost: 0,
-            namespace: 0,
+            namespace: 1,
             table: Table::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
