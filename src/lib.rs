@@ -272,31 +272,33 @@ impl<'a> Frame<'a> {
 struct State<'a> {
     cost: u64,
     namespace: u64,
+    call_stack: Vec<Frame<'a>>,
     table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
-    goals: Vec<Frame<'a>>,
     rules_iter: &'a Rules,
     rules_iter_orig: &'a Rules,
 }
 
 impl<'a> State<'a> {
     fn into_result(self) -> Option<(u64, Table<'a>)> {
-        self.goals.is_empty().then_some((self.cost, self.table))
+        self.call_stack
+            .is_empty()
+            .then_some((self.cost, self.table))
     }
-    fn push_goals(&mut self, goals_iter: Frame<'a>) {
-        self.goals.push(goals_iter)
+    fn push_frame(&mut self, frame: Frame<'a>) {
+        self.call_stack.push(frame)
     }
     fn pop_goal(&mut self) -> Option<(u64, &'a Term)> {
-        let frame = self.goals.last_mut()?;
+        let frame = self.call_stack.last_mut()?;
         frame.body.next().map(|x| (frame.namespace, x))
     }
-    fn update_goals(&mut self) {
-        while let Some(frame) = self.goals.last_mut()
+    fn update_shared(&mut self) {
+        while let Some(frame) = self.call_stack.last_mut()
             && frame.body.is_empty()
         {
             self.shared.push((frame.namespace, frame.head));
-            self.goals.pop();
+            self.call_stack.pop();
         }
     }
 }
@@ -304,28 +306,25 @@ impl<'a> State<'a> {
 impl<'a> Iterator for State<'a> {
     type Item = Option<State<'a>>;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((namespace, term)) = self.shared_remaining.pop() {
+        if let Some(shared) = self.shared_remaining.pop() {
             let mut state = self.clone();
-            let (namespace_goal, goal) = state.pop_goal()?;
-            if !state.table.unify((namespace, term), (namespace_goal, goal)) {
+            let goal = state.pop_goal()?;
+            if !state.table.unify(shared, goal) {
                 return Some(None);
             }
-            state.update_goals();
+            state.update_shared();
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
         } else if let Some(rule) = self.rules_iter.next() {
             let mut state = self.clone();
-            let (namespace_goal, goal) = state.pop_goal()?;
+            let goal = state.pop_goal()?;
             state.cost = state.cost + rule.cost;
-            if !state
-                .table
-                .unify((state.namespace, &rule.head), (namespace_goal, goal))
-            {
+            if !state.table.unify((state.namespace, &rule.head), goal) {
                 return Some(None);
             }
-            state.push_goals(Frame::new(state.namespace, &rule.head, &rule.body));
-            state.update_goals();
+            state.push_frame(Frame::new(state.namespace, &rule.head, &rule.body));
+            state.update_shared();
             state.namespace += 1;
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
@@ -382,10 +381,10 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
         pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 1,
+            call_stack: vec![Frame::new(0, goal_first, goals_iter)],
             table: Table::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
-            goals: vec![Frame::new(0, goal_first, goals_iter)],
             rules_iter: rules_iter,
             rules_iter_orig: rules_iter,
         }]),
