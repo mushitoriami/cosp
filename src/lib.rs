@@ -252,13 +252,30 @@ impl<'a> Table<'a> {
 }
 
 #[derive(Clone)]
+struct Frame<'a> {
+    namespace: u64,
+    head: &'a Term,
+    body: &'a Terms,
+}
+
+impl<'a> Frame<'a> {
+    fn new(namespace: u64, head: &'a Term, body: &'a Terms) -> Self {
+        Frame {
+            namespace,
+            head,
+            body,
+        }
+    }
+}
+
+#[derive(Clone)]
 struct State<'a> {
     cost: u64,
     namespace: u64,
     table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
     shared_remaining: Vec<(u64, &'a Term)>,
-    goals: Vec<(u64, &'a Term, &'a Terms)>,
+    goals: Vec<Frame<'a>>,
     rules_iter: &'a Rules,
     rules_iter_orig: &'a Rules,
 }
@@ -267,18 +284,18 @@ impl<'a> State<'a> {
     fn into_result(self) -> Option<(u64, Table<'a>)> {
         self.goals.is_empty().then_some((self.cost, self.table))
     }
-    fn push_goals(&mut self, goals_iter: (u64, &'a Term, &'a Terms)) {
+    fn push_goals(&mut self, goals_iter: Frame<'a>) {
         self.goals.push(goals_iter)
     }
     fn pop_goal(&mut self) -> Option<(u64, &'a Term)> {
-        let (namespace, _, iter) = self.goals.last_mut()?;
-        iter.next().map(|x| (*namespace, x))
+        let frame = self.goals.last_mut()?;
+        frame.body.next().map(|x| (frame.namespace, x))
     }
     fn update_goals(&mut self) {
-        while let Some((namespace, head, goals_iter)) = self.goals.last_mut()
-            && goals_iter.is_empty()
+        while let Some(frame) = self.goals.last_mut()
+            && frame.body.is_empty()
         {
-            self.shared.push((*namespace, head));
+            self.shared.push((frame.namespace, frame.head));
             self.goals.pop();
         }
     }
@@ -307,7 +324,7 @@ impl<'a> Iterator for State<'a> {
             {
                 return Some(None);
             }
-            state.push_goals((state.namespace, &rule.head, &rule.body));
+            state.push_goals(Frame::new(state.namespace, &rule.head, &rule.body));
             state.update_goals();
             state.namespace += 1;
             state.rules_iter = state.rules_iter_orig;
@@ -368,7 +385,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
             table: Table::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
-            goals: vec![(0, goal_first, goals_iter)],
+            goals: vec![Frame::new(0, goal_first, goals_iter)],
             rules_iter: rules_iter,
             rules_iter_orig: rules_iter,
         }]),
