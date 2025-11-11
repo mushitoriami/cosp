@@ -301,34 +301,36 @@ impl<'a> State<'a> {
             self.call_stack.pop();
         }
     }
+    fn step(
+        &self,
+        cost: u64,
+        head: (u64, &'a Term),
+        body_option: Option<&'a Terms>,
+    ) -> Option<State<'a>> {
+        let mut state = self.clone();
+        let goal = state.pop_goal()?;
+        state.cost = state.cost + cost;
+        if !state.table.unify(head, goal) {
+            return None;
+        }
+        if let Some(body) = body_option {
+            state.push_frame(Frame::new(head.0, head.1, body));
+        }
+        state.update_shared();
+        state.namespace += 1;
+        state.rules_iter = state.rules_iter_orig;
+        state.shared_remaining = state.shared.clone();
+        Some(state)
+    }
 }
 
 impl<'a> Iterator for State<'a> {
     type Item = Option<State<'a>>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(shared) = self.shared_remaining.pop() {
-            let mut state = self.clone();
-            let goal = state.pop_goal()?;
-            if !state.table.unify(shared, goal) {
-                return Some(None);
-            }
-            state.update_shared();
-            state.rules_iter = state.rules_iter_orig;
-            state.shared_remaining = state.shared.clone();
-            Some(Some(state))
+            Some(self.step(0, shared, None))
         } else if let Some(rule) = self.rules_iter.next() {
-            let mut state = self.clone();
-            let goal = state.pop_goal()?;
-            state.cost = state.cost + rule.cost;
-            if !state.table.unify((state.namespace, &rule.head), goal) {
-                return Some(None);
-            }
-            state.push_frame(Frame::new(state.namespace, &rule.head, &rule.body));
-            state.update_shared();
-            state.namespace += 1;
-            state.rules_iter = state.rules_iter_orig;
-            state.shared_remaining = state.shared.clone();
-            Some(Some(state))
+            Some(self.step(rule.cost, (self.namespace, &rule.head), Some(&rule.body)))
         } else {
             None
         }
