@@ -340,15 +340,11 @@ impl<'a> Iterator for Infer<'a> {
     type Item = Option<(u64, Table<'a>)>;
     fn next(&mut self) -> Option<Self::Item> {
         let mut state = self.pq.pop()?;
-        if state.is_end() {
-            return Some(Some(state.cost_and_table()));
-        }
-        if let Some(state_next_option) = state.next() {
-            self.pq.push(state);
-            if let Some(state_next) = state_next_option {
-                self.pq.push(state_next)
-            }
-        }
+        let Some(state_next) = state.next() else {
+            return Some(state.is_end().then_some(state.cost_and_table()));
+        };
+        self.pq.push(state);
+        state_next.map(|x| self.pq.push(x));
         Some(None)
     }
 }
