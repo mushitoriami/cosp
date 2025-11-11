@@ -36,6 +36,6 @@ fn main() {
             println!("inf.");
             continue;
         };
-        println!("{}{}.", cosp::stringify_table(&table).join(""), cost);
+        println!("{table}{cost}.");
     }
 }

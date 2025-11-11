@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -81,16 +82,6 @@ fn stringify_goal(goal: (u64, &Term), table: &Table) -> String {
             None => label.clone() + "#" + &ns.to_string(),
         },
     }
-}
-
-pub fn stringify_table(table: &Table) -> Vec<String> {
-    let mut res = Vec::new();
-    for (&(ns, label), &goal) in &table.hashmap {
-        if ns == 0 {
-            res.push(label.to_string() + " = " + &stringify_goal(goal, table) + "\n");
-        }
-    }
-    res
 }
 
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
@@ -206,6 +197,17 @@ impl<'a, const N: usize> From<[((u64, &'a str), (u64, &'a Term)); N]> for Table<
     fn from(arr: [((u64, &'a str), (u64, &'a Term)); N]) -> Self {
         let hashmap = HashMap::from(arr);
         Table { hashmap }
+    }
+}
+
+impl fmt::Display for Table<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.hashmap
+            .iter()
+            .filter(|((namespace, _), _)| *namespace == 0)
+            .try_for_each(|((_, label), goal)| {
+                write!(f, "{} = {}\n", label, stringify_goal(*goal, self))
+            })
     }
 }
 
@@ -421,14 +423,17 @@ mod tests {
 
     #[test]
     fn test_stringify_table_1() {
-        let strings = stringify_table(&Table::from([
+        let string = Table::from([
             ((0, "x"), (1, &"x?".parse().unwrap())),
             ((1, "x"), (2, &"x?".parse().unwrap())),
             ((0, "y"), (1, &"x?".parse().unwrap())),
-        ]));
-        assert_eq!(strings.len(), 2);
-        assert!(strings.contains(&"x = x#2\n".into()));
-        assert!(strings.contains(&"y = x#2\n".into()));
+        ])
+        .to_string();
+        let strings: Vec<&str> = string.split('\n').collect();
+        assert_eq!(strings.len(), 3);
+        assert!(strings.contains(&"x = x#2".into()));
+        assert!(strings.contains(&"y = x#2".into()));
+        assert!(strings.contains(&"".into()));
     }
 
     #[test]
