@@ -170,41 +170,12 @@ impl FromStr for Rules {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct Table<'a> {
-    hashmap: HashMap<(u64, &'a str), (u64, &'a Term)>,
-}
-
-impl<'a, const N: usize> From<[((u64, &'a str), (u64, &'a Term)); N]> for Table<'a> {
-    fn from(arr: [((u64, &'a str), (u64, &'a Term)); N]) -> Self {
-        let hashmap = HashMap::from(arr);
-        Table { hashmap }
-    }
-}
-
-impl<'a> Table<'a> {
-    pub fn new() -> Self {
-        let hashmap = HashMap::new();
-        Table { hashmap }
-    }
-}
-
 fn variables(t: &Term) -> Vec<&str> {
     match t {
         Term::Constant(_) => Vec::new(),
         Term::Variable(s) => [s.as_str()].into(),
         Term::Compound(_, args) => args.flat_map(|x| variables(x)).collect(),
     }
-}
-
-fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
-    variables(t)
-        .into_iter()
-        .all(|s1| match r.hashmap.get(&(nst, s1)) {
-            Some(&g) => occurs_check((nsv, s), g, r),
-            None => (nst, s1) != (nsv, s),
-        })
 }
 
 fn matchings_terms<'a>(ts1: &'a Terms, ts2: &'a Terms) -> Option<Vec<(&'a Term, &'a Term)>> {
@@ -225,22 +196,48 @@ fn matchings<'a>(t1: &'a Term, t2: &'a Term) -> Option<Vec<(&'a Term, &'a Term)>
     }
 }
 
-fn add_matching<'a>(goal1: (u64, &'a str), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
-    match r.hashmap.get(&goal1) {
-        Some(&goal) => unify(goal, goal2, r),
-        None => occurs_check(goal1, goal2, r) && r.hashmap.insert(goal1, goal2).is_none(),
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Table<'a> {
+    hashmap: HashMap<(u64, &'a str), (u64, &'a Term)>,
+}
+
+impl<'a, const N: usize> From<[((u64, &'a str), (u64, &'a Term)); N]> for Table<'a> {
+    fn from(arr: [((u64, &'a str), (u64, &'a Term)); N]) -> Self {
+        let hashmap = HashMap::from(arr);
+        Table { hashmap }
     }
 }
 
-fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
-    match matchings(goal1.1, goal2.1) {
-        Some(m) => m.into_iter().all(|x| match x {
-            (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
-            (Term::Variable(s), t) => add_matching((goal1.0, s), (goal2.0, t), r),
-            (t, Term::Variable(s)) => add_matching((goal2.0, s), (goal1.0, t), r),
-            _ => unreachable!(),
-        }),
-        None => false,
+impl<'a> Table<'a> {
+    pub fn new() -> Self {
+        let hashmap = HashMap::new();
+        Table { hashmap }
+    }
+    pub fn occurs_check(&self, (nsv, s): (u64, &str), (nst, t): (u64, &Term)) -> bool {
+        variables(t)
+            .into_iter()
+            .all(|s1| match self.hashmap.get(&(nst, s1)) {
+                Some(&g) => self.occurs_check((nsv, s), g),
+                None => (nst, s1) != (nsv, s),
+            })
+    }
+    pub fn add_matching(&mut self, goal1: (u64, &'a str), goal2: (u64, &'a Term)) -> bool {
+        match self.hashmap.get(&goal1) {
+            Some(&goal) => self.unify(goal, goal2),
+            None => self.occurs_check(goal1, goal2) && self.hashmap.insert(goal1, goal2).is_none(),
+        }
+    }
+    pub fn unify(&mut self, goal1: (u64, &'a Term), goal2: (u64, &'a Term)) -> bool {
+        match matchings(goal1.1, goal2.1) {
+            Some(m) => m.into_iter().all(|x| match x {
+                (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
+                (Term::Variable(s), t) => self.add_matching((goal1.0, s), (goal2.0, t)),
+                (t, Term::Variable(s)) => self.add_matching((goal2.0, s), (goal1.0, t)),
+                _ => unreachable!(),
+            }),
+            None => false,
+        }
     }
 }
 
@@ -286,7 +283,7 @@ impl<'a> Iterator for State<'a> {
         if let Some((namespace, term)) = self.shared_remaining.pop() {
             let mut state = self.clone();
             let (namespace_goal, goal) = state.pop_goal();
-            if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
+            if !state.table.unify((namespace, term), (namespace_goal, goal)) {
                 return Some(None);
             }
             state.update_goals();
@@ -298,11 +295,10 @@ impl<'a> Iterator for State<'a> {
             let (namespace_goal, goal) = state.pop_goal();
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
-            if !unify(
-                (state.namespace, head),
-                (namespace_goal, goal),
-                &mut state.table,
-            ) {
+            if !state
+                .table
+                .unify((state.namespace, head), (namespace_goal, goal))
+            {
                 return Some(None);
             }
             state.push_goals((state.namespace, head, body));
@@ -633,7 +629,7 @@ mod tests {
         let term3 = "c*".parse().unwrap();
         let term4 = "a*".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(
             table,
             Table::from([((0, "x"), (1, &term3)), ((1, "y"), (0, &term4))])
@@ -647,7 +643,7 @@ mod tests {
         let term3 = "a*".parse().unwrap();
         let term4 = "b*".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((1, &term1), (1, &term2), &mut table));
+        assert!(table.unify((1, &term1), (1, &term2)));
         assert_eq!(
             table,
             Table::from([((1, "x"), (1, &term3)), ((1, "y"), (1, &term4))])
@@ -660,7 +656,7 @@ mod tests {
         let term2 = "y?".parse().unwrap();
         let term3 = "y?".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (0, &term2), &mut table));
+        assert!(table.unify((0, &term1), (0, &term2)));
         assert_eq!(table, Table::from([((0, "x"), (0, &term3))]));
     }
 
@@ -669,7 +665,7 @@ mod tests {
         let term1 = "f(a*,b*)".parse().unwrap();
         let term2 = "f(x?,x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(!unify((0, &term1), (1, &term2), &mut table));
+        assert!(!table.unify((0, &term1), (1, &term2)));
     }
 
     #[test]
@@ -677,7 +673,7 @@ mod tests {
         let term1 = "x?".parse().unwrap();
         let term2 = "f(x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(!unify((0, &term1), (0, &term2), &mut table));
+        assert!(!table.unify((0, &term1), (0, &term2)));
     }
 
     #[test]
@@ -685,7 +681,7 @@ mod tests {
         let term1 = "f(f(x?),g(y?))".parse().unwrap();
         let term2 = "f(y?,x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(!unify((1, &term1), (1, &term2), &mut table));
+        assert!(!table.unify((1, &term1), (1, &term2)));
     }
 
     #[test]
@@ -693,7 +689,7 @@ mod tests {
         let term1 = "g(x?,y?,x?)".parse().unwrap();
         let term2 = "g(f(x?),f(y?),y?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(!unify((1, &term1), (1, &term2), &mut table));
+        assert!(!table.unify((1, &term1), (1, &term2)));
     }
 
     #[test]
@@ -701,7 +697,7 @@ mod tests {
         let term1 = "x?".parse().unwrap();
         let term2 = "x?".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (0, &term2), &mut table));
+        assert!(table.unify((0, &term1), (0, &term2)));
         assert_eq!(table, Table::new());
     }
 
@@ -711,7 +707,7 @@ mod tests {
         let term2 = "f(x?)".parse().unwrap();
         let term3 = "f(x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(table, Table::from([((0, "x"), (1, &term3))]));
     }
 
@@ -721,7 +717,7 @@ mod tests {
         let term2 = "x?".parse().unwrap();
         let term3 = "x?".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(table, Table::from([((0, "x"), (1, &term3))]));
     }
 
@@ -732,7 +728,7 @@ mod tests {
         let term3 = "g(y?)".parse().unwrap();
         let term4 = "f(x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(
             table,
             Table::from([((1, "x"), (0, &term3)), ((1, "y"), (0, &term4))])
@@ -744,7 +740,7 @@ mod tests {
         let term1 = "f(f(x?), x?)".parse().unwrap();
         let term2 = "f(x?,x?)".parse().unwrap();
         let mut table = Table::new();
-        assert!(!unify((0, &term1), (1, &term2), &mut table));
+        assert!(!table.unify((0, &term1), (1, &term2)));
     }
 
     const RULES1: &str = r#"
