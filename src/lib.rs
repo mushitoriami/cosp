@@ -210,11 +210,11 @@ impl<'a, const N: usize> From<[((u64, &'a str), (u64, &'a Term)); N]> for Table<
 }
 
 impl<'a> Table<'a> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let hashmap = HashMap::new();
         Table { hashmap }
     }
-    pub fn occurs_check(&self, (nsv, s): (u64, &str), (nst, t): (u64, &Term)) -> bool {
+    fn occurs_check(&self, (nsv, s): (u64, &str), (nst, t): (u64, &Term)) -> bool {
         variables(t)
             .into_iter()
             .all(|s1| match self.hashmap.get(&(nst, s1)) {
@@ -222,13 +222,13 @@ impl<'a> Table<'a> {
                 None => (nst, s1) != (nsv, s),
             })
     }
-    pub fn add_matching(&mut self, goal1: (u64, &'a str), goal2: (u64, &'a Term)) -> bool {
+    fn add_matching(&mut self, goal1: (u64, &'a str), goal2: (u64, &'a Term)) -> bool {
         match self.hashmap.get(&goal1) {
             Some(&goal) => self.unify(goal, goal2),
             None => self.occurs_check(goal1, goal2) && self.hashmap.insert(goal1, goal2).is_none(),
         }
     }
-    pub fn unify(&mut self, goal1: (u64, &'a Term), goal2: (u64, &'a Term)) -> bool {
+    fn unify(&mut self, goal1: (u64, &'a Term), goal2: (u64, &'a Term)) -> bool {
         match matchings(goal1.1, goal2.1) {
             Some(m) => m.into_iter().all(|x| match x {
                 (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
