@@ -254,18 +254,15 @@ struct State<'a> {
 }
 
 impl<'a> State<'a> {
-    fn is_end(&self) -> bool {
-        self.goals.is_empty()
-    }
-    fn cost_and_table(self) -> (u64, Table<'a>) {
-        (self.cost, self.table)
+    fn into_result(self) -> Option<(u64, Table<'a>)> {
+        self.goals.is_empty().then_some((self.cost, self.table))
     }
     fn push_goals(&mut self, goals_iter: (u64, &'a Term, &'a Terms)) {
         self.goals.push(goals_iter)
     }
-    fn pop_goal(&mut self) -> (u64, &'a Term) {
-        let (namespace, _, iter) = self.goals.last_mut().unwrap();
-        (*namespace, iter.next().unwrap())
+    fn pop_goal(&mut self) -> Option<(u64, &'a Term)> {
+        let (namespace, _, iter) = self.goals.last_mut()?;
+        iter.next().map(|x| (*namespace, x))
     }
     fn update_goals(&mut self) {
         while let Some((namespace, head, goals_iter)) = self.goals.last_mut()
@@ -282,7 +279,7 @@ impl<'a> Iterator for State<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((namespace, term)) = self.shared_remaining.pop() {
             let mut state = self.clone();
-            let (namespace_goal, goal) = state.pop_goal();
+            let (namespace_goal, goal) = state.pop_goal()?;
             if !state.table.unify((namespace, term), (namespace_goal, goal)) {
                 return Some(None);
             }
@@ -292,7 +289,7 @@ impl<'a> Iterator for State<'a> {
             Some(Some(state))
         } else if let Some(Rule::Rule(cost_rule, head, body)) = self.rules_iter.next() {
             let mut state = self.clone();
-            let (namespace_goal, goal) = state.pop_goal();
+            let (namespace_goal, goal) = state.pop_goal()?;
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
             if !state
@@ -340,15 +337,11 @@ impl<'a> Iterator for Infer<'a> {
     type Item = Option<(u64, Table<'a>)>;
     fn next(&mut self) -> Option<Self::Item> {
         let mut state = self.pq.pop()?;
-        if state.is_end() {
-            return Some(Some(state.cost_and_table()));
-        }
-        if let Some(state_next_option) = state.next() {
-            self.pq.push(state);
-            if let Some(state_next) = state_next_option {
-                self.pq.push(state_next)
-            }
-        }
+        let Some(state_next) = state.next() else {
+            return Some(state.into_result());
+        };
+        self.pq.push(state);
+        state_next.map(|x| self.pq.push(x));
         Some(None)
     }
 }
