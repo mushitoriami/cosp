@@ -69,23 +69,23 @@ impl<T> List<T> {
     }
 }
 
-fn stringify_goal(goal: (u64, &Term), table: &HashMap<(u64, &str), (u64, &Term)>) -> String {
+fn stringify_goal(goal: (u64, &Term), table: &Table) -> String {
     match goal {
         (ns, Term::Compound(label, args)) => {
             let goals_string: Vec<String> = args.map(|x| stringify_goal((ns, x), table)).collect();
             label.clone() + "(" + &goals_string.join(", ") + ")"
         }
         (_, Term::Constant(label)) => label.clone() + "*",
-        (ns, Term::Variable(label)) => match table.get(&(ns, label)) {
+        (ns, Term::Variable(label)) => match table.hashmap.get(&(ns, label)) {
             Some(&goal) => stringify_goal(goal, table),
             None => label.clone() + "#" + &ns.to_string(),
         },
     }
 }
 
-pub fn stringify_table(table: &HashMap<(u64, &str), (u64, &Term)>) -> Vec<String> {
+pub fn stringify_table(table: &Table) -> Vec<String> {
     let mut res = Vec::new();
-    for (&(ns, label), &goal) in table {
+    for (&(ns, label), &goal) in &table.hashmap {
         if ns == 0 {
             res.push(label.to_string() + " = " + &stringify_goal(goal, table) + "\n");
         }
@@ -170,21 +170,12 @@ impl FromStr for Rules {
     }
 }
 
-type Table<'a> = HashMap<(u64, &'a str), (u64, &'a Term)>;
-
 fn variables(t: &Term) -> Vec<&str> {
     match t {
         Term::Constant(_) => Vec::new(),
         Term::Variable(s) => [s.as_str()].into(),
         Term::Compound(_, args) => args.flat_map(|x| variables(x)).collect(),
     }
-}
-
-fn occurs_check((nsv, s): (u64, &str), (nst, t): (u64, &Term), r: &Table) -> bool {
-    variables(t).into_iter().all(|s1| match r.get(&(nst, s1)) {
-        Some(&g) => occurs_check((nsv, s), g, r),
-        None => (nst, s1) != (nsv, s),
-    })
 }
 
 fn matchings_terms<'a>(ts1: &'a Terms, ts2: &'a Terms) -> Option<Vec<(&'a Term, &'a Term)>> {
@@ -205,22 +196,48 @@ fn matchings<'a>(t1: &'a Term, t2: &'a Term) -> Option<Vec<(&'a Term, &'a Term)>
     }
 }
 
-fn add_matching<'a>(goal1: (u64, &'a str), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
-    match r.get(&goal1) {
-        Some(&goal) => unify(goal, goal2, r),
-        None => occurs_check(goal1, goal2, r) && r.insert(goal1, goal2).is_none(),
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Table<'a> {
+    hashmap: HashMap<(u64, &'a str), (u64, &'a Term)>,
+}
+
+impl<'a, const N: usize> From<[((u64, &'a str), (u64, &'a Term)); N]> for Table<'a> {
+    fn from(arr: [((u64, &'a str), (u64, &'a Term)); N]) -> Self {
+        let hashmap = HashMap::from(arr);
+        Table { hashmap }
     }
 }
 
-fn unify<'a>(goal1: (u64, &'a Term), goal2: (u64, &'a Term), r: &mut Table<'a>) -> bool {
-    match matchings(goal1.1, goal2.1) {
-        Some(m) => m.into_iter().all(|x| match x {
-            (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
-            (Term::Variable(s), t) => add_matching((goal1.0, s), (goal2.0, t), r),
-            (t, Term::Variable(s)) => add_matching((goal2.0, s), (goal1.0, t), r),
-            _ => unreachable!(),
-        }),
-        None => false,
+impl<'a> Table<'a> {
+    fn new() -> Self {
+        let hashmap = HashMap::new();
+        Table { hashmap }
+    }
+    fn occurs_check(&self, (nsv, s): (u64, &str), (nst, t): (u64, &Term)) -> bool {
+        variables(t)
+            .into_iter()
+            .all(|s1| match self.hashmap.get(&(nst, s1)) {
+                Some(&g) => self.occurs_check((nsv, s), g),
+                None => (nst, s1) != (nsv, s),
+            })
+    }
+    fn add_matching(&mut self, goal1: (u64, &'a str), goal2: (u64, &'a Term)) -> bool {
+        match self.hashmap.get(&goal1) {
+            Some(&goal) => self.unify(goal, goal2),
+            None => self.occurs_check(goal1, goal2) && self.hashmap.insert(goal1, goal2).is_none(),
+        }
+    }
+    fn unify(&mut self, goal1: (u64, &'a Term), goal2: (u64, &'a Term)) -> bool {
+        match matchings(goal1.1, goal2.1) {
+            Some(m) => m.into_iter().all(|x| match x {
+                (Term::Variable(s1), Term::Variable(s2)) if (goal1.0, s1) == (goal2.0, s2) => true,
+                (Term::Variable(s), t) => self.add_matching((goal1.0, s), (goal2.0, t)),
+                (t, Term::Variable(s)) => self.add_matching((goal2.0, s), (goal1.0, t)),
+                _ => unreachable!(),
+            }),
+            None => false,
+        }
     }
 }
 
@@ -266,7 +283,7 @@ impl<'a> Iterator for State<'a> {
         if let Some((namespace, term)) = self.shared_remaining.pop() {
             let mut state = self.clone();
             let (namespace_goal, goal) = state.pop_goal();
-            if !unify((namespace, term), (namespace_goal, goal), &mut state.table) {
+            if !state.table.unify((namespace, term), (namespace_goal, goal)) {
                 return Some(None);
             }
             state.update_goals();
@@ -278,11 +295,10 @@ impl<'a> Iterator for State<'a> {
             let (namespace_goal, goal) = state.pop_goal();
             state.cost = state.cost + cost_rule;
             state.namespace += 1;
-            if !unify(
-                (state.namespace, head),
-                (namespace_goal, goal),
-                &mut state.table,
-            ) {
+            if !state
+                .table
+                .unify((state.namespace, head), (namespace_goal, goal))
+            {
                 return Some(None);
             }
             state.push_goals((state.namespace, head, body));
@@ -346,7 +362,7 @@ fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
         pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 0,
-            table: HashMap::new(),
+            table: Table::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
             goals: vec![(0, goal_first, goals_iter)],
@@ -367,7 +383,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_1() {
         assert_eq!(
-            stringify_goal((0, &"a*".parse().unwrap()), &HashMap::new()),
+            stringify_goal((0, &"a*".parse().unwrap()), &Table::new()),
             "a*"
         );
     }
@@ -375,7 +391,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_2() {
         assert_eq!(
-            stringify_goal((0, &"x?".parse().unwrap()), &HashMap::new()),
+            stringify_goal((0, &"x?".parse().unwrap()), &Table::new()),
             "x#0"
         );
     }
@@ -385,7 +401,7 @@ mod tests {
         assert_eq!(
             stringify_goal(
                 (2, &"x?".parse().unwrap()),
-                &HashMap::from([((2, "x"), (1, &"y?".parse().unwrap()))])
+                &Table::from([((2, "x"), (1, &"y?".parse().unwrap()))])
             ),
             "y#1"
         );
@@ -394,7 +410,7 @@ mod tests {
     #[test]
     fn test_stringify_goal_4() {
         assert_eq!(
-            stringify_goal((0, &"ab(c_d(e_f*),g_h?)".parse().unwrap()), &HashMap::new()),
+            stringify_goal((0, &"ab(c_d(e_f*),g_h?)".parse().unwrap()), &Table::new()),
             "ab(c_d(e_f*), g_h#0)"
         );
     }
@@ -404,7 +420,7 @@ mod tests {
         assert_eq!(
             stringify_goal(
                 (2, &"f(a*, b*, x?)".parse().unwrap()),
-                &HashMap::from([((2, "x"), (1, &"ab(c_d(e_f*),g_h?)".parse().unwrap()))])
+                &Table::from([((2, "x"), (1, &"ab(c_d(e_f*),g_h?)".parse().unwrap()))])
             ),
             "f(a*, b*, ab(c_d(e_f*), g_h#1))"
         );
@@ -412,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_stringify_table_1() {
-        let strings = stringify_table(&HashMap::from([
+        let strings = stringify_table(&Table::from([
             ((0, "x"), (1, &"x?".parse().unwrap())),
             ((1, "x"), (2, &"x?".parse().unwrap())),
             ((0, "y"), (1, &"x?".parse().unwrap())),
@@ -612,11 +628,11 @@ mod tests {
         let term2 = "f(y? ,b* ,c* )".parse().unwrap();
         let term3 = "c*".parse().unwrap();
         let term4 = "a*".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(
             table,
-            [((0, "x"), (1, &term3)), ((1, "y"), (0, &term4))].into()
+            Table::from([((0, "x"), (1, &term3)), ((1, "y"), (0, &term4))])
         );
     }
 
@@ -626,11 +642,11 @@ mod tests {
         let term2 = "f(a* ,b* )".parse().unwrap();
         let term3 = "a*".parse().unwrap();
         let term4 = "b*".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((1, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(table.unify((1, &term1), (1, &term2)));
         assert_eq!(
             table,
-            [((1, "x"), (1, &term3)), ((1, "y"), (1, &term4))].into()
+            Table::from([((1, "x"), (1, &term3)), ((1, "y"), (1, &term4))])
         );
     }
 
@@ -639,50 +655,50 @@ mod tests {
         let term1 = "x?".parse().unwrap();
         let term2 = "y?".parse().unwrap();
         let term3 = "y?".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (0, &term2), &mut table));
-        assert_eq!(table, [((0, "x"), (0, &term3))].into());
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (0, &term2)));
+        assert_eq!(table, Table::from([((0, "x"), (0, &term3))]));
     }
 
     #[test]
     fn test_unify_4() {
         let term1 = "f(a*,b*)".parse().unwrap();
         let term2 = "f(x?,x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(!unify((0, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(!table.unify((0, &term1), (1, &term2)));
     }
 
     #[test]
     fn test_unify_5() {
         let term1 = "x?".parse().unwrap();
         let term2 = "f(x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(!unify((0, &term1), (0, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(!table.unify((0, &term1), (0, &term2)));
     }
 
     #[test]
     fn test_unify_6() {
         let term1 = "f(f(x?),g(y?))".parse().unwrap();
         let term2 = "f(y?,x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(!unify((1, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(!table.unify((1, &term1), (1, &term2)));
     }
 
     #[test]
     fn test_unify_7() {
         let term1 = "g(x?,y?,x?)".parse().unwrap();
         let term2 = "g(f(x?),f(y?),y?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(!unify((1, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(!table.unify((1, &term1), (1, &term2)));
     }
 
     #[test]
     fn test_unify_8() {
         let term1 = "x?".parse().unwrap();
         let term2 = "x?".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (0, &term2), &mut table));
-        assert_eq!(table, HashMap::new());
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (0, &term2)));
+        assert_eq!(table, Table::new());
     }
 
     #[test]
@@ -690,9 +706,9 @@ mod tests {
         let term1 = "x?".parse().unwrap();
         let term2 = "f(x?)".parse().unwrap();
         let term3 = "f(x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
-        assert_eq!(table, [((0, "x"), (1, &term3))].into());
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (1, &term2)));
+        assert_eq!(table, Table::from([((0, "x"), (1, &term3))]));
     }
 
     #[test]
@@ -700,9 +716,9 @@ mod tests {
         let term1 = "x?".parse().unwrap();
         let term2 = "x?".parse().unwrap();
         let term3 = "x?".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
-        assert_eq!(table, [((0, "x"), (1, &term3))].into());
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (1, &term2)));
+        assert_eq!(table, Table::from([((0, "x"), (1, &term3))]));
     }
 
     #[test]
@@ -711,11 +727,11 @@ mod tests {
         let term2 = "f(y?,x?)".parse().unwrap();
         let term3 = "g(y?)".parse().unwrap();
         let term4 = "f(x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(unify((0, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(table.unify((0, &term1), (1, &term2)));
         assert_eq!(
             table,
-            [((1, "x"), (0, &term3)), ((1, "y"), (0, &term4))].into()
+            Table::from([((1, "x"), (0, &term3)), ((1, "y"), (0, &term4))])
         );
     }
 
@@ -723,8 +739,8 @@ mod tests {
     fn test_unify_12() {
         let term1 = "f(f(x?), x?)".parse().unwrap();
         let term2 = "f(x?,x?)".parse().unwrap();
-        let mut table = HashMap::new();
-        assert!(!unify((0, &term1), (1, &term2), &mut table));
+        let mut table = Table::new();
+        assert!(!table.unify((0, &term1), (1, &term2)));
     }
 
     const RULES1: &str = r#"
@@ -744,7 +760,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(0, HashMap::new())]
+            [(0, Table::new())]
         );
     }
 
@@ -780,10 +796,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(
-                0,
-                HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
-            )]
+            [(0, Table::from([((0, "x"), (1, &"tom*".parse().unwrap()))]))]
         );
     }
 
@@ -795,14 +808,8 @@ mod tests {
             .flatten()
             .collect::<Vec<(u64, Table)>>();
         assert!(res.len() == 2);
-        assert!(res.contains(&(
-            0,
-            HashMap::from([((0, "y"), (1, &"ann*".parse().unwrap()))])
-        )));
-        assert!(res.contains(&(
-            0,
-            HashMap::from([((0, "y"), (1, &"pat*".parse().unwrap()))])
-        )));
+        assert!(res.contains(&(0, Table::from([((0, "y"), (1, &"ann*".parse().unwrap()))]))));
+        assert!(res.contains(&(0, Table::from([((0, "y"), (1, &"pat*".parse().unwrap()))]))));
     }
 
     #[test]
@@ -815,42 +822,42 @@ mod tests {
         assert!(res.len() == 6);
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"pam*".parse().unwrap())),
                 ((0, "q"), (1, &"bob*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"tom*".parse().unwrap())),
                 ((0, "q"), (1, &"bob*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"tom*".parse().unwrap())),
                 ((0, "q"), (1, &"liz*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"bob*".parse().unwrap())),
                 ((0, "q"), (1, &"ann*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"bob*".parse().unwrap())),
                 ((0, "q"), (1, &"pat*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "p"), (1, &"pat*".parse().unwrap())),
                 ((0, "q"), (1, &"jim*".parse().unwrap()))
             ])
@@ -867,7 +874,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((0, "y"), (1, &"pat*".parse().unwrap())),
                     ((0, "x"), (2, &"bob*".parse().unwrap()))
                 ])
@@ -885,14 +892,14 @@ mod tests {
         assert!(res.len() == 2);
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "x"), (1, &"bob*".parse().unwrap())),
                 ((0, "y"), (2, &"ann*".parse().unwrap()))
             ])
         )));
         assert!(res.contains(&(
             0,
-            HashMap::from([
+            Table::from([
                 ((0, "x"), (1, &"bob*".parse().unwrap())),
                 ((0, "y"), (2, &"pat*".parse().unwrap()))
             ])
@@ -907,10 +914,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(
-                0,
-                HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
-            )]
+            [(0, Table::from([((0, "x"), (1, &"bob*".parse().unwrap()))]))]
         )
     }
 
@@ -926,7 +930,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((0, "x"), (1, &"bob*".parse().unwrap())),
                     ((0, "y"), (2, &"pat*".parse().unwrap()))
                 ])
@@ -955,7 +959,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((1, "z"), (0, &"x?".parse().unwrap())),
                     ((0, "x"), (2, &"bear*".parse().unwrap()))
                 ])
@@ -995,7 +999,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((1, "x"), (0, &"tom*".parse().unwrap())),
                     ((1, "z"), (0, &"pat*".parse().unwrap())),
                     ((1, "y"), (2, &"bob*".parse().unwrap())),
@@ -1014,7 +1018,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(0, HashMap::from([]))]
+            [(0, Table::new())]
         )
     }
 
@@ -1028,7 +1032,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((1, "x"), (0, &"pam*".parse().unwrap())),
                     ((1, "y"), (0, &"bob*".parse().unwrap()))
                 ])
@@ -1046,7 +1050,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((1, "x"), (0, &"pam*".parse().unwrap())),
                     ((1, "z"), (0, &"ann*".parse().unwrap())),
                     ((1, "y"), (2, &"bob*".parse().unwrap()))
@@ -1065,7 +1069,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 0,
-                HashMap::from([
+                Table::from([
                     ((1, "x"), (0, &"bob*".parse().unwrap())),
                     ((1, "z"), (0, &"jim*".parse().unwrap())),
                     ((1, "y"), (2, &"pat*".parse().unwrap()))
@@ -1091,7 +1095,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(2, HashMap::new())]
+            [(2, Table::new())]
         );
     }
 
@@ -1127,10 +1131,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(
-                4,
-                HashMap::from([((0, "x"), (1, &"tom*".parse().unwrap()))])
-            )]
+            [(4, Table::from([((0, "x"), (1, &"tom*".parse().unwrap()))]))]
         );
     }
 
@@ -1143,14 +1144,8 @@ mod tests {
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
             [
-                (
-                    2,
-                    HashMap::from([((0, "y"), (1, &"pat*".parse().unwrap()))])
-                ),
-                (
-                    3,
-                    HashMap::from([((0, "y"), (1, &"ann*".parse().unwrap()))])
-                )
+                (2, Table::from([((0, "y"), (1, &"pat*".parse().unwrap()))])),
+                (3, Table::from([((0, "y"), (1, &"ann*".parse().unwrap()))]))
             ]
         );
     }
@@ -1166,42 +1161,42 @@ mod tests {
             [
                 (
                     1,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"pat*".parse().unwrap())),
                         ((0, "q"), (1, &"jim*".parse().unwrap()))
                     ])
                 ),
                 (
                     2,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"bob*".parse().unwrap())),
                         ((0, "q"), (1, &"pat*".parse().unwrap()))
                     ])
                 ),
                 (
                     3,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"bob*".parse().unwrap())),
                         ((0, "q"), (1, &"ann*".parse().unwrap()))
                     ])
                 ),
                 (
                     4,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"tom*".parse().unwrap())),
                         ((0, "q"), (1, &"liz*".parse().unwrap()))
                     ])
                 ),
                 (
                     5,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"tom*".parse().unwrap())),
                         ((0, "q"), (1, &"bob*".parse().unwrap()))
                     ])
                 ),
                 (
                     6,
-                    HashMap::from([
+                    Table::from([
                         ((0, "p"), (1, &"pam*".parse().unwrap())),
                         ((0, "q"), (1, &"bob*".parse().unwrap()))
                     ])
@@ -1220,7 +1215,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 1 + 2,
-                HashMap::from([
+                Table::from([
                     ((0, "y"), (1, &"pat*".parse().unwrap())),
                     ((0, "x"), (2, &"bob*".parse().unwrap()))
                 ])
@@ -1239,14 +1234,14 @@ mod tests {
             [
                 (
                     5 + 2,
-                    HashMap::from([
+                    Table::from([
                         ((0, "x"), (1, &"bob*".parse().unwrap())),
                         ((0, "y"), (2, &"pat*".parse().unwrap()))
                     ])
                 ),
                 (
                     5 + 3,
-                    HashMap::from([
+                    Table::from([
                         ((0, "x"), (1, &"bob*".parse().unwrap())),
                         ((0, "y"), (2, &"ann*".parse().unwrap()))
                     ])
@@ -1265,7 +1260,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 3 + 2,
-                HashMap::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
+                Table::from([((0, "x"), (1, &"bob*".parse().unwrap()))])
             )]
         )
     }
@@ -1282,7 +1277,7 @@ mod tests {
                 .collect::<Vec<(u64, Table)>>(),
             [(
                 6 + 2 + 1,
-                HashMap::from([
+                Table::from([
                     ((0, "x"), (1, &"bob*".parse().unwrap())),
                     ((0, "y"), (2, &"pat*".parse().unwrap()))
                 ])
@@ -1305,7 +1300,7 @@ mod tests {
             infer_iter(query, rules)
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
-            [(3, HashMap::from([])), (4, HashMap::from([]))]
+            [(3, Table::new()), (4, Table::new())]
         )
     }
 
@@ -1324,9 +1319,9 @@ mod tests {
                 .flatten()
                 .collect::<Vec<(u64, Table)>>(),
             [
-                (3, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
-                (5, HashMap::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
-                (6, HashMap::from([((0, "x"), (1, &"q*".parse().unwrap())),]))
+                (3, Table::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
+                (5, Table::from([((0, "x"), (1, &"p*".parse().unwrap())),])),
+                (6, Table::from([((0, "x"), (1, &"q*".parse().unwrap())),]))
             ]
         )
     }
@@ -1342,7 +1337,7 @@ mod tests {
         let query = &"a*.".parse().unwrap();
         assert_eq!(
             infer_iter(query, rules).flatten().next().unwrap(),
-            (3, HashMap::new())
+            (3, Table::new())
         )
     }
 }
