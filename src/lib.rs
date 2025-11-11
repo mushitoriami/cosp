@@ -254,11 +254,8 @@ struct State<'a> {
 }
 
 impl<'a> State<'a> {
-    fn is_end(&self) -> bool {
-        self.goals.is_empty()
-    }
-    fn cost_and_table(self) -> (u64, Table<'a>) {
-        (self.cost, self.table)
+    fn into_result(self) -> Option<(u64, Table<'a>)> {
+        self.goals.is_empty().then_some((self.cost, self.table))
     }
     fn push_goals(&mut self, goals_iter: (u64, &'a Term, &'a Terms)) {
         self.goals.push(goals_iter)
@@ -341,7 +338,7 @@ impl<'a> Iterator for Infer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut state = self.pq.pop()?;
         let Some(state_next) = state.next() else {
-            return Some(state.is_end().then_some(state.cost_and_table()));
+            return Some(state.into_result());
         };
         self.pq.push(state);
         state_next.map(|x| self.pq.push(x));
