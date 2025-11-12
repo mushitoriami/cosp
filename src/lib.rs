@@ -70,12 +70,6 @@ impl<T> List<T> {
             List::Cons(_, terms) => terms.len() + 1,
         }
     }
-    fn is_empty(&self) -> bool {
-        match self {
-            List::Empty() => true,
-            List::Cons(_, _) => false,
-        }
-    }
 }
 
 fn stringify_goal(goal: (u64, &Term), table: &Table) -> String {
@@ -283,24 +277,20 @@ struct State<'a> {
 
 impl<'a> State<'a> {
     fn into_result(self) -> Option<(u64, Table<'a>)> {
-        self.call_stack
-            .is_empty()
-            .then_some((self.cost, self.table))
+        self.next_goal.is_none().then_some((self.cost, self.table))
     }
     fn push_frame(&mut self, frame: Frame<'a>) {
         self.call_stack.push(frame)
     }
     fn pop_goal(&mut self) -> Option<(u64, &'a Term)> {
-        let frame = self.call_stack.last_mut()?;
-        frame.body.next().map(|x| (frame.namespace, x))
-    }
-    fn update_shared(&mut self) {
-        while let Some(frame) = self.call_stack.last_mut()
-            && frame.body.is_empty()
-        {
+        while let Some(frame) = self.call_stack.last_mut() {
+            if let Some(head) = frame.body.next() {
+                return Some((frame.namespace, head));
+            }
             self.shared.push((frame.namespace, frame.head));
             self.call_stack.pop();
         }
+        None
     }
     fn step(
         &self,
@@ -317,7 +307,6 @@ impl<'a> State<'a> {
         if let Some(body) = body_option {
             state.push_frame(Frame::new(head.0, head.1, body));
         }
-        state.update_shared();
         state.next_goal = state.pop_goal();
         state.namespace += 1;
         state.rules_iter = state.rules_iter_orig;
