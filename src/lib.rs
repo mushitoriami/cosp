@@ -272,6 +272,7 @@ impl<'a> Frame<'a> {
 struct State<'a> {
     cost: u64,
     namespace: u64,
+    next_goal: Option<(u64, &'a Term)>,
     call_stack: Vec<Frame<'a>>,
     table: Table<'a>,
     shared: Vec<(u64, &'a Term)>,
@@ -308,7 +309,7 @@ impl<'a> State<'a> {
         body_option: Option<&'a Terms>,
     ) -> Option<State<'a>> {
         let mut state = self.clone();
-        let goal = state.pop_goal()?;
+        let goal = state.next_goal?;
         state.cost = state.cost + cost;
         if !state.table.unify(head, goal) {
             return None;
@@ -317,6 +318,7 @@ impl<'a> State<'a> {
             state.push_frame(Frame::new(head.0, head.1, body));
         }
         state.update_shared();
+        state.next_goal = state.pop_goal();
         state.namespace += 1;
         state.rules_iter = state.rules_iter_orig;
         state.shared_remaining = state.shared.clone();
@@ -375,14 +377,14 @@ impl<'a> Iterator for Infer<'a> {
 }
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
-    let goals_iter = goals;
-    let mut goals_iter_tmp = goals_iter;
-    let goal_first = goals_iter_tmp.next().unwrap();
+    let mut goals_iter = goals;
+    let goal_first = goals_iter.next().unwrap();
     let rules_iter = rules;
     Infer {
         pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 1,
+            next_goal: Some((0, goal_first)),
             call_stack: vec![Frame::new(0, goal_first, goals_iter)],
             table: Table::new(),
             shared: Vec::new(),
