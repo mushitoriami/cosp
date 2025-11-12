@@ -14,8 +14,16 @@ pub enum Term {
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
-pub enum Rule {
-    Rule(u64, Term, Terms),
+pub struct Rule {
+    cost: u64,
+    head: Term,
+    body: Terms,
+}
+
+impl Rule {
+    fn new(cost: u64, head: Term, body: Terms) -> Self {
+        Rule { cost, head, body }
+    }
 }
 
 #[derive(Debug)]
@@ -117,8 +125,8 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
     let _ = (iter.next()? == "]").then_some(())?;
     let head = take_term(iter)?;
     match iter.next()? {
-        ":-" => Some(Rule::Rule(cost, head, take_terms(iter)?)),
-        "." => Some(Rule::Rule(cost, head, Terms::new())),
+        ":-" => Some(Rule::new(cost, head, take_terms(iter)?)),
+        "." => Some(Rule::new(cost, head, Terms::new())),
         _ => None,
     }
 }
@@ -289,18 +297,18 @@ impl<'a> Iterator for State<'a> {
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
             Some(Some(state))
-        } else if let Some(Rule::Rule(cost_rule, head, body)) = self.rules_iter.next() {
+        } else if let Some(rule) = self.rules_iter.next() {
             let mut state = self.clone();
             let (namespace_goal, goal) = state.pop_goal()?;
-            state.cost = state.cost + cost_rule;
+            state.cost = state.cost + rule.cost;
             state.namespace += 1;
             if !state
                 .table
-                .unify((state.namespace, head), (namespace_goal, goal))
+                .unify((state.namespace, &rule.head), (namespace_goal, goal))
             {
                 return Some(None);
             }
-            state.push_goals((state.namespace, head, body));
+            state.push_goals((state.namespace, &rule.head, &rule.body));
             state.update_goals();
             state.rules_iter = state.rules_iter_orig;
             state.shared_remaining = state.shared.clone();
@@ -589,7 +597,7 @@ mod tests {
         assert_eq!(
             rules,
             Ok(Rules::from_iter([
-                Rule::Rule(
+                Rule::new(
                     2,
                     Term::Constant(String::from("a")),
                     Terms::from_iter([
@@ -597,7 +605,7 @@ mod tests {
                         Term::Variable(String::from("c"))
                     ])
                 ),
-                Rule::Rule(4, Term::Constant(String::from("d")), Terms::new())
+                Rule::new(4, Term::Constant(String::from("d")), Terms::new())
             ]))
         );
     }
