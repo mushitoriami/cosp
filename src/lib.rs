@@ -292,21 +292,12 @@ impl<'a> State<'a> {
         }
         None
     }
-    fn step(
-        &self,
-        cost: u64,
-        head: (u64, &'a Term),
-        body_option: Option<&'a Terms>,
-    ) -> Option<State<'a>> {
+    fn step(&self, cost: u64, head: (u64, &'a Term), body: Option<&'a Terms>) -> Option<State<'a>> {
         let mut state = self.clone();
         let goal = state.next_goal?;
         state.cost = state.cost + cost;
-        if !state.table.unify(head, goal) {
-            return None;
-        }
-        if let Some(body) = body_option {
-            state.push_frame(Frame::new(head.0, head.1, body));
-        }
+        state.table.unify(head, goal).then_some(())?;
+        body.map(|x| state.push_frame(Frame::new(head.0, head.1, x)));
         state.next_goal = state.pop_goal();
         state.namespace += 1;
         state.rules_iter = state.rules_iter_orig;
