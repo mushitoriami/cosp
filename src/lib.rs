@@ -29,7 +29,7 @@ impl Rule {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum List<T> {
-    Empty(),
+    Nil,
     Cons(Box<T>, Box<List<T>>),
 }
 
@@ -51,7 +51,7 @@ impl<T> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iterable: I) -> Self {
         let mut iter = iterable.into_iter();
         match iter.next() {
-            Some(term) => List::head_and_tail(term, iter.collect()),
+            Some(term) => List::cons(term, iter.collect()),
             None => List::new(),
         }
     }
@@ -59,14 +59,14 @@ impl<T> FromIterator<T> for List<T> {
 
 impl<T> List<T> {
     fn new() -> Self {
-        List::Empty()
+        List::Nil
     }
-    fn head_and_tail(head: T, tail: Self) -> Self {
+    fn cons(head: T, tail: Self) -> Self {
         List::Cons(Box::new(head), Box::new(tail))
     }
     fn len(&self) -> usize {
         match self {
-            List::Empty() => 0,
+            List::Nil => 0,
             List::Cons(_, terms) => terms.len() + 1,
         }
     }
@@ -89,8 +89,8 @@ fn stringify_goal(goal: (u64, &Term), table: &Table) -> String {
 fn take_term_args<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
-        "," => Some(Terms::head_and_tail(term, take_term_args(iter)?)),
-        ")" => Some(Terms::head_and_tail(term, Terms::new())),
+        "," => Some(Terms::cons(term, take_term_args(iter)?)),
+        ")" => Some(Terms::cons(term, Terms::new())),
         _ => None,
     }
 }
@@ -108,8 +108,8 @@ fn take_term<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Term> {
 fn take_terms<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Terms> {
     let term = take_term(iter)?;
     match iter.next()? {
-        "," => Some(Terms::head_and_tail(term, take_terms(iter)?)),
-        "." => Some(Terms::head_and_tail(term, Terms::new())),
+        "," => Some(Terms::cons(term, take_terms(iter)?)),
+        "." => Some(Terms::cons(term, Terms::new())),
         _ => None,
     }
 }
@@ -127,7 +127,7 @@ fn take_rule<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rule> {
 
 fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rules> {
     match iter.next() {
-        Some("[") => Some(Rules::head_and_tail(take_rule(iter)?, take_rules(iter)?)),
+        Some("[") => Some(Rules::cons(take_rule(iter)?, take_rules(iter)?)),
         None => Some(Rules::new()),
         _ => None,
     }
