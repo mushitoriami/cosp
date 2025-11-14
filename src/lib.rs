@@ -248,12 +248,12 @@ impl<'a> Table<'a> {
 #[derive(Clone)]
 struct Frame<'a> {
     namespace: u64,
-    head: &'a Term,
+    head: Option<&'a Term>,
     body: &'a Terms,
 }
 
 impl<'a> Frame<'a> {
-    fn new(namespace: u64, head: &'a Term, body: &'a Terms) -> Self {
+    fn new(namespace: u64, head: Option<&'a Term>, body: &'a Terms) -> Self {
         Frame {
             namespace,
             head,
@@ -287,7 +287,7 @@ impl<'a> State<'a> {
             if let Some(head) = frame.body.next() {
                 return Some((frame.namespace, head));
             }
-            self.shared.push((frame.namespace, frame.head));
+            frame.head.map(|x| self.shared.push((frame.namespace, x)));
             self.call_stack.pop();
         }
         None
@@ -297,7 +297,7 @@ impl<'a> State<'a> {
         let goal = state.next_goal?;
         state.cost = state.cost + cost;
         state.table.unify(head, goal).then_some(())?;
-        body.map(|x| state.push_frame(Frame::new(head.0, head.1, x)));
+        body.map(|x| state.push_frame(Frame::new(head.0, Some(head.1), x)));
         state.next_goal = state.pop_goal();
         state.namespace += 1;
         state.rules_iter = state.rules_iter_orig;
@@ -358,14 +358,14 @@ impl<'a> Iterator for Infer<'a> {
 
 fn infer_iter<'a>(goals: &'a Terms, rules: &'a Rules) -> Infer<'a> {
     let mut goals_iter = goals;
-    let goal_first = goals_iter.next().unwrap();
+    let goal_first = goals_iter.next();
     let rules_iter = rules;
     Infer {
         pq: BinaryHeap::from([State {
             cost: 0,
             namespace: 1,
-            next_goal: Some((0, goal_first)),
-            call_stack: vec![Frame::new(0, goal_first, goals_iter)],
+            next_goal: goal_first.map(|x| (0, x)),
+            call_stack: vec![Frame::new(0, None, goals_iter)],
             table: Table::new(),
             shared: Vec::new(),
             shared_remaining: Vec::new(),
@@ -1344,6 +1344,18 @@ mod tests {
         assert_eq!(
             infer_iter(query, rules).flatten().next().unwrap(),
             (3, Table::new())
+        )
+    }
+
+    #[test]
+    fn test_infer_8_1() {
+        let rules = &"".parse().unwrap();
+        assert_eq!(
+            infer_iter(&Terms::from_iter([]), rules)
+                .flatten()
+                .next()
+                .unwrap(),
+            (0, Table::new())
         )
     }
 }
