@@ -19,7 +19,7 @@ pub struct Rule {
 }
 
 impl Rule {
-    fn new(cost: u64, head: Term, body: Terms) -> Self {
+    pub fn new(cost: u64, head: Term, body: Terms) -> Self {
         Rule { cost, head, body }
     }
 }
@@ -30,8 +30,8 @@ pub enum List<T> {
     Cons(Box<T>, Box<List<T>>),
 }
 
-type Terms = List<Term>;
-type Rules = List<Rule>;
+pub type Terms = List<Term>;
+pub type Rules = List<Rule>;
 
 impl<'a, T> Iterator for &'a List<T> {
     type Item = &'a T;
@@ -55,7 +55,7 @@ impl<T> FromIterator<T> for List<T> {
 }
 
 impl<T> List<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         List::Nil
     }
     fn cons(head: T, tail: Self) -> Self {
