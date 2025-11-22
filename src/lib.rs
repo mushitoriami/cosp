@@ -4,16 +4,14 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Constant(String),
     Variable(String),
     Compound(String, Terms),
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rule {
     cost: u64,
     head: Term,
@@ -26,8 +24,7 @@ impl Rule {
     }
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum List<T> {
     Nil,
     Cons(Box<T>, Box<List<T>>),
