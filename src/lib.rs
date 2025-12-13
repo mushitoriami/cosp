@@ -1,3 +1,4 @@
+use kohaku::Tokenizer;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
@@ -133,8 +134,8 @@ fn take_rules<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Rules> {
 impl FromStr for Term {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?"]);
-        let mut iter = tokenizer.tokenize(s).map_while(|x| x.ok());
+        let keyword = ["(", ")", ",", "*", "?"];
+        let mut iter = s.tokenize(keyword).map_while(|x| x.ok());
         let term = take_term(&mut iter).ok_or(())?;
         iter.next().is_none().then_some(term).ok_or(())
     }
@@ -143,8 +144,8 @@ impl FromStr for Term {
 impl FromStr for Terms {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", "."]);
-        let mut iter = tokenizer.tokenize(s).map_while(|x| x.ok());
+        let keyword = ["(", ")", ",", "*", "?", "."];
+        let mut iter = s.tokenize(keyword).map_while(|x| x.ok());
         let query = take_terms(&mut iter).ok_or(())?;
         iter.next().is_none().then_some(query).ok_or(())
     }
@@ -153,8 +154,8 @@ impl FromStr for Terms {
 impl FromStr for Rules {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut tokenizer = kohaku::Tokenizer::new(["(", ")", ",", "*", "?", ".", ":-", "[", "]"]);
-        let mut iter = tokenizer.tokenize(s).map_while(|x| x.ok());
+        let keyword = ["(", ")", ",", "*", "?", ".", ":-", "[", "]"];
+        let mut iter = s.tokenize(keyword).map_while(|x| x.ok());
         let rules = take_rules(&mut iter).ok_or(())?;
         iter.next().is_none().then_some(rules).ok_or(())
     }
