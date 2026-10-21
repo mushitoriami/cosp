@@ -27,7 +27,9 @@ fn main() {
         let mut input = String::new();
         print!("?- ");
         std::io::stdout().flush().unwrap();
-        std::io::stdin().read_line(&mut input).unwrap();
+        if std::io::stdin().read_line(&mut input).unwrap() == 0 {
+            break;
+        }
         let Ok(query) = input.trim_end().parse() else {
             eprintln!("Cannot parse input: `{}`", input.trim_end());
             continue;
