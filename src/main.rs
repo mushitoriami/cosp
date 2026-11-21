@@ -1,43 +1,37 @@
 use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
+use std::fs;
+use std::io::{self, Write};
 use std::process;
 
 fn main() {
     let args = env::args().collect::<Vec<String>>();
-    if args.len() != 2 {
+    let [_, filename] = args.as_slice() else {
         eprintln!("Usage: cosp <filename>");
         process::exit(1);
-    }
-    let Ok(mut file) = File::open(&args[1]) else {
-        eprintln!("Cannot open file: {}", &args[1]);
+    };
+    let Ok(contents) = fs::read_to_string(filename) else {
+        eprintln!("Cannot read file: {filename}");
         process::exit(1);
     };
-    let mut contents = String::new();
-    let Ok(_) = file.read_to_string(&mut contents) else {
-        eprintln!("Cannot read file: {}", &args[1]);
-        process::exit(1);
-    };
-    let Ok(rules) = &contents.parse() else {
-        eprintln!("Cannot parse rules file: {}", &args[1]);
+    let Ok(rules) = contents.parse() else {
+        eprintln!("Cannot parse rules file: {filename}");
         process::exit(1);
     };
     loop {
         let mut input = String::new();
         print!("?- ");
-        std::io::stdout().flush().unwrap();
-        if std::io::stdin().read_line(&mut input).unwrap() == 0 {
+        io::stdout().flush().unwrap();
+        if io::stdin().read_line(&mut input).unwrap() == 0 {
             break;
         }
-        let Ok(query) = input.trim_end().parse() else {
-            eprintln!("Cannot parse input: `{}`", input.trim_end());
+        let input = input.trim_end();
+        let Ok(query) = input.parse() else {
+            eprintln!("Cannot parse input: `{input}`");
             continue;
         };
-        let Some((cost, table)) = cosp::infer(&query, &rules) else {
-            println!("inf.");
-            continue;
-        };
-        println!("{table}{cost}.");
+        match cosp::infer(&query, &rules) {
+            Some((cost, table)) => println!("{table}{cost}."),
+            None => println!("inf."),
+        }
     }
 }
